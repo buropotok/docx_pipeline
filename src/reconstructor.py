@@ -1,4 +1,8 @@
 # UltimateReconstructorV10.py
+# Reconstructor Version: v10
+# Schema Version: 2.8.0
+# Rules Version: 0.2
+
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
 # Target: visually deterministic for "forms" subset (no tables/images/fields/hyperlinks)
 

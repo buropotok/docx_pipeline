@@ -1,5 +1,9 @@
-# UltimateParserV41_plus.py
+# UltimateParserV41.py
 # DOCX -> RAW JSON (schema v2.7.x / v2.8-ish) using lxml (NO python-docx)
+# Parser Version: v41
+# Schema Version: 2.8.0
+# Rules Version: 0.2
+
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
 #
 # Based on your UltimateParserV41, with careful incremental improvements (NO hardcode):
