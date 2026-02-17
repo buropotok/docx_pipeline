@@ -4,7 +4,7 @@ Deterministic DOCX ↔ RAW JSON pipeline for "forms" subset documents.
 
 Current Versions:
 
-- Schema: 2.8.0
+- Schema: 2.8.1
 - Rules: 0.2
 - Reconstructor: UltimateReconstructorV10
 - Parser: (see src/parser.py version header)
