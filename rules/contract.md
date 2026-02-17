@@ -1,5 +1,5 @@
 Reconstruction Contract v0.2
-(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.0)
+(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.1)
 
 0. Versioning
 - RAW JSON MUST declare:
@@ -7,7 +7,7 @@ Reconstruction Contract v0.2
   meta.rules_version
 - This contract corresponds to:
   rules_version = "0.2"
-  schema_version = "2.8.0"
+  schema_version = "2.8.1"
 
 1. General Principles
 1.1 Goal
@@ -146,7 +146,7 @@ Therefore, for deterministic reconstruction with V10, producers SHOULD omit p_ov
 
 RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V10
 Run types allowed by schema but ignored by UltimateReconstructorV10:
-- cr, softHyphen, noBreakHyphen
+- softHyphen, noBreakHyphen
 If present, they do not contribute to reconstructed XML in this version.
 For strict 1:1 determinism with V10, producers MUST NOT emit these run types.
 
