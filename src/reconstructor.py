@@ -575,7 +575,7 @@ class UltimateReconstructorV10:
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
             # levels keys are strings of ints
-            for ilvl_str in sorted(levels.keys(), key=lambda s: int(s)):
+            for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                 lvl_rec = levels[ilvl_str] or {}
                 lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
 
@@ -585,11 +585,17 @@ class UltimateReconstructorV10:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
 
+                fmt = lvl_rec.get("format")
+                if not isinstance(fmt, str):
+                    continue
                 numFmt = _w_sub(lvl_el, "numFmt")
-                _set_w_attr(numFmt, "val", lvl_rec.get("format", "decimal"))
+                _set_w_attr(numFmt, "val", fmt)
 
+                template = lvl_rec.get("template")
+                if not isinstance(template, str):
+                    continue
                 lvlText = _w_sub(lvl_el, "lvlText")
-                _set_w_attr(lvlText, "val", lvl_rec.get("template", "%1."))
+                _set_w_attr(lvlText, "val", template)
 
                 # minimal; can be extended later (lvlJc/pPr/rPr)
 
@@ -608,12 +614,12 @@ class UltimateReconstructorV10:
             # lvl overrides
             ovs = rec.get("lvl_overrides", {}) or {}
             if isinstance(ovs, dict) and ovs:
-                for ilvl_str in sorted(ovs.keys(), key=lambda s: int(s)):
+                for ilvl_str in sorted(ovs.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                     ov = ovs[ilvl_str] or {}
-                    lvlOv = _w_sub(num_el, "lvlOverride", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                     if "start" in ov:
                         ov_start = _safe_int(ov.get("start"))
                         if ov_start is not None:
+                            lvlOv = _w_sub(num_el, "lvlOverride", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                             st = _w_sub(lvlOv, "startOverride")
                             _set_w_attr(st, "val", ov_start)
 
