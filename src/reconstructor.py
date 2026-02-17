@@ -195,7 +195,7 @@ class UltimateReconstructorV10:
 
             for run in runs:
                 rtype = run.get("type")
-                if rtype not in ("text", "tab", "break", "sym"):
+                if rtype not in ("text", "tab", "break", "sym", "cr"):
                     # unsupported run types do not contribute in v10 (RULE-RUN-UNSUPPORTED)
                     continue
 
@@ -223,6 +223,9 @@ class UltimateReconstructorV10:
                     bt = run.get("break_type")
                     if bt in ("textWrapping", "page", "column"):
                         _set_w_attr(br, "type", bt)
+
+                elif rtype == "cr":
+                    _w_sub(r, "cr")
 
                 elif rtype == "sym":
                     # In your schema: sym.text is a string; we treat it as literal char if possible.
@@ -586,6 +589,13 @@ class UltimateReconstructorV10:
                 template = lvl_rec.get("template")
                 if not isinstance(template, str):
                     continue
+
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
 
                 lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                 if "start" in lvl_rec:
