@@ -194,16 +194,18 @@ class UltimateReconstructorV10:
                 continue
 
             for run in runs:
-                r = _w_sub(p, "r")
+                rtype = run.get("type")
+                if rtype not in ("text", "tab", "break", "sym"):
+                    # unsupported run types do not contribute in v10 (RULE-RUN-UNSUPPORTED)
+                    continue
 
+                r = _w_sub(p, "r")
                 diff = run.get("diff", {}) or {}
                 effective_r = self._merge_formats(base_r, diff)
 
                 rPr = self._build_rPr(effective_r)
                 if rPr is not None:
                     r.append(rPr)
-
-                rtype = run.get("type")
 
                 if rtype == "text":
                     txt = run.get("text", "")
@@ -233,8 +235,8 @@ class UltimateReconstructorV10:
                     t.text = sym_text
 
                 else:
-                    # unknown run types are ignored in this subset
-                    pass
+                    # unreachable due to early type guard
+                    continue
 
         # sectPr from document_info.page_setup (must exist per your requirement)
         sectPr = self._build_sectPr(self.document_info.get("page_setup", {}) or {})
@@ -577,8 +579,15 @@ class UltimateReconstructorV10:
             # levels keys are strings of ints
             for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                 lvl_rec = levels[ilvl_str] or {}
-                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                fmt = lvl_rec.get("format")
+                if not isinstance(fmt, str):
+                    continue
 
+                template = lvl_rec.get("template")
+                if not isinstance(template, str):
+                    continue
+
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                 if "start" in lvl_rec:
                     sv = _safe_int(lvl_rec.get("start"))
                     if sv is not None:
