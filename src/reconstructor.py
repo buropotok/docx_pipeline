@@ -594,9 +594,15 @@ class UltimateReconstructorV10:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
 
+                fmt = lvl_rec.get("format")
+                if not isinstance(fmt, str):
+                    continue
                 numFmt = _w_sub(lvl_el, "numFmt")
                 _set_w_attr(numFmt, "val", fmt)
 
+                template = lvl_rec.get("template")
+                if not isinstance(template, str):
+                    continue
                 lvlText = _w_sub(lvl_el, "lvlText")
                 _set_w_attr(lvlText, "val", template)
 
