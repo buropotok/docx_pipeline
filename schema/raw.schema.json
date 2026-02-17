@@ -1,0 +1,456 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Standard RAW JSON Schema v2.8.0 (Meta Versioning + Spacing Lines/Autospacing + Relational Styles/Numbering + Tabs + Page Setup + Extended Paragraph/Run Model)",
+  "type": "object",
+  "required": ["meta", "document_info", "numbering_definitions", "styles", "content"],
+  "additionalProperties": false,
+
+  "$defs": {
+    "alignmentEnum": {
+      "type": "string",
+      "enum": ["LEFT", "CENTER", "RIGHT", "JUSTIFY"]
+    },
+
+    "lineRuleEnum": {
+      "type": "string",
+      "enum": ["AUTO", "AT_LEAST", "EXACT"]
+    },
+
+    "textAlignmentEnum": {
+      "type": "string",
+      "enum": ["AUTO", "BASELINE", "TOP", "CENTER", "BOTTOM"]
+    },
+
+    "breakTypeEnum": {
+      "type": "string",
+      "enum": ["textWrapping", "page", "column"]
+    },
+
+    "numberingRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numId", "ilvl"],
+      "properties": {
+        "numId": { "type": "string" },
+        "ilvl": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "tabStop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["posTwip", "val"],
+      "properties": {
+        "posTwip": { "type": "integer", "minimum": 0 },
+        "val": {
+          "type": "string",
+          "enum": ["left", "center", "right", "decimal", "bar", "clear"]
+        },
+        "leader": {
+          "type": "string",
+          "enum": ["none", "dot", "hyphen", "underscore", "heavy", "middleDot"]
+        }
+      }
+    },
+
+    "rFonts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ascii": { "type": "string" },
+        "hAnsi": { "type": "string" },
+        "eastAsia": { "type": "string" },
+        "cs": { "type": "string" },
+
+        "asciiTheme": { "type": "string" },
+        "hAnsiTheme": { "type": "string" },
+        "eastAsiaTheme": { "type": "string" },
+        "csTheme": { "type": "string" }
+      }
+    },
+
+    "pFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alignment": { "$ref": "#/$defs/alignmentEnum" },
+
+        "indentStartTwip": { "type": "integer" },
+        "indentEndTwip": {
+          "type": "integer",
+          "description": "Right indent (w:ind/@w:right). Важно для бланков."
+        },
+        "indentFirstLineTwip": { "type": "integer" },
+
+        "indentHangingTwip": {
+          "type": "integer",
+          "description": "Hanging indent (w:ind/@w:hanging). Важно для 1:1 восстановления списков."
+        },
+
+        "spaceBeforeTwip": { "type": "integer" },
+        "spaceAfterTwip": { "type": "integer" },
+
+        "spaceBeforeLines": {
+          "type": "integer",
+          "description": "w:spacing/@w:beforeLines. Не twips."
+        },
+        "spaceAfterLines": {
+          "type": "integer",
+          "description": "w:spacing/@w:afterLines. Не twips."
+        },
+
+        "beforeAutospacing": {
+          "type": "boolean",
+          "description": "w:spacing/@w:beforeAutospacing (true when '1')."
+        },
+        "afterAutospacing": {
+          "type": "boolean",
+          "description": "w:spacing/@w:afterAutospacing (true when '1')."
+        },
+
+        "lineTwip": {
+          "type": "integer",
+          "description": "Line spacing value from w:spacing/@w:line (twips). В сочетании с lineRule."
+        },
+        "lineRule": { "$ref": "#/$defs/lineRuleEnum" },
+
+        "linePitchTwip": {
+          "type": "integer",
+          "description": "Если вы используете docGrid/linePitch; опционально."
+        },
+
+        "textAlignment": {
+          "$ref": "#/$defs/textAlignmentEnum",
+          "description": "w:textAlignment (baseline/top/center/bottom)."
+        },
+
+        "contextualSpacing": {
+          "type": "boolean",
+          "description": "w:contextualSpacing"
+        },
+
+        "keepNext": { "type": "boolean" },
+        "keepLines": { "type": "boolean" },
+        "pageBreakBefore": { "type": "boolean" },
+        "widowControl": { "type": "boolean" },
+
+        "snapToGrid": {
+          "type": "boolean",
+          "description": "w:snapToGrid (если используется сетка документа)."
+        },
+
+        "tabs": {
+          "type": "array",
+          "description": "Tab stops абзаца (w:tabs). Опционально.",
+          "items": { "$ref": "#/$defs/tabStop" }
+        },
+
+        "numbering": { "$ref": "#/$defs/numberingRef" }
+      }
+    },
+
+    "rFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rFonts": { "$ref": "#/$defs/rFonts" },
+
+        "font_size_half_points": {
+          "type": "integer",
+          "description": "Размер шрифта в half-points (DOCX: 24 = 12pt)."
+        },
+
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "underline": { "type": "string" },
+
+        "color": { "type": "string" },
+
+        "vertical_align": {
+          "type": "string",
+          "enum": ["baseline", "superscript", "subscript"]
+        },
+
+        "all_caps": { "type": "boolean" },
+
+        "charSpacingTwip": {
+          "type": "integer",
+          "description": "Character spacing (w:spacing). В twips, может быть отрицательным."
+        },
+
+        "positionHalfPoints": {
+          "type": "integer",
+          "description": "w:position (смещение baseline), half-points."
+        },
+
+        "lang": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "val": { "type": "string" },
+            "eastAsia": { "type": "string" },
+            "bidi": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "rDiff": {
+      "type": "object",
+      "description": "Локальные отклонения r_format (частичный override).",
+      "additionalProperties": false,
+      "properties": {
+        "rFonts": { "$ref": "#/$defs/rFonts" },
+
+        "font_size_half_points": { "type": "integer" },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "underline": { "type": "string" },
+        "color": { "type": "string" },
+        "vertical_align": {
+          "type": "string",
+          "enum": ["baseline", "superscript", "subscript"]
+        },
+        "all_caps": { "type": "boolean" },
+
+        "charSpacingTwip": { "type": "integer" },
+        "positionHalfPoints": { "type": "integer" },
+
+        "lang": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "val": { "type": "string" },
+            "eastAsia": { "type": "string" },
+            "bidi": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "tab",
+            "break",
+            "sym",
+            "cr",
+            "softHyphen",
+            "noBreakHyphen"
+          ]
+        },
+
+        "text": { "type": "string" },
+
+        "diff": { "$ref": "#/$defs/rDiff" },
+
+        "break_type": {
+          "$ref": "#/$defs/breakTypeEnum",
+          "description": "Для type=break: w:br/@w:type (textWrapping/page/column). Если отсутствует — textWrapping."
+        },
+
+        "meta": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Технические подсказки для восстановителя (особенно для первой табуляции).",
+          "properties": {
+            "leading": { "type": "boolean" },
+            "preserve": { "type": "boolean" }
+          }
+        }
+      },
+
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "text" } } },
+          "then": { "required": ["text"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "sym" } } },
+          "then": { "required": ["text"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "tab" } } },
+          "then": { "not": { "required": ["text"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "break" } } },
+          "then": { "not": { "required": ["text"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "cr" } } },
+          "then": { "not": { "required": ["text"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "softHyphen" } } },
+          "then": { "not": { "required": ["text"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "noBreakHyphen" } } },
+          "then": { "not": { "required": ["text"] } }
+        }
+      ]
+    }
+  },
+
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "rules_version"],
+      "properties": {
+        "schema_version": { "type": "string" },
+        "rules_version": { "type": "string" },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "document_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page_setup": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pageWidthTwip": { "type": "integer" },
+            "pageHeightTwip": { "type": "integer" },
+
+            "orient": {
+              "type": "string",
+              "enum": ["portrait", "landscape"]
+            },
+
+            "marginLeftTwip": { "type": "integer" },
+            "marginRightTwip": { "type": "integer" },
+            "marginTopTwip": { "type": "integer" },
+            "marginBottomTwip": { "type": "integer" },
+
+            "headerTwip": {
+              "type": "integer",
+              "description": "w:pgMar/@w:header"
+            },
+            "footerTwip": {
+              "type": "integer",
+              "description": "w:pgMar/@w:footer"
+            },
+            "gutterTwip": {
+              "type": "integer",
+              "description": "w:pgMar/@w:gutter"
+            },
+
+            "cols": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "num": { "type": "integer", "minimum": 1 },
+                "spaceTwip": { "type": "integer" },
+                "equalWidth": { "type": "boolean" }
+              }
+            }
+          }
+        },
+
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultTabStopTwip": {
+              "type": "integer",
+              "description": "w:settings/w:defaultTabStop. Критично для табов без tabStops."
+            }
+          }
+        }
+      }
+    },
+
+    "numbering_definitions": {
+      "type": "object",
+      "description": "Справочник нумерации: ключ = numId (string).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["levels"],
+        "properties": {
+          "abstractNumId": { "type": "string" },
+
+          "levels": {
+            "type": "object",
+            "description": "Ключ = ilvl (string).",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["format", "template", "start"],
+              "properties": {
+                "format": { "type": "string" },
+                "template": { "type": "string" },
+                "start": { "type": "integer" }
+              }
+            }
+          },
+
+          "lvl_overrides": {
+            "type": "object",
+            "description": "Опциональные overrides уровней (аналог lvlOverride в DOCX). Ключ = ilvl (string).",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "start": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "styles": {
+      "type": "object",
+      "description": "Библиотека стилей (p_format + r_format). Ключ = style_id.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["p_format", "r_format"],
+        "properties": {
+          "p_format": { "$ref": "#/$defs/pFormat" },
+          "r_format": { "$ref": "#/$defs/rFormat" }
+        }
+      }
+    },
+
+    "content": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["style_id", "runs"],
+        "properties": {
+          "style_id": { "type": "string" },
+
+          "p_override": {
+            "$ref": "#/$defs/pFormat",
+            "description": "Локальные отклонения p_format (частичный override)."
+          },
+
+          "runs": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/run" }
+          }
+        }
+      }
+    }
+  }
+}
