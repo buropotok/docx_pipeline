@@ -1,6 +1,6 @@
 # UltimateReconstructorV10.py
 # Reconstructor Version: v10
-# Schema Version: 2.8.0
+# Schema Version: 2.8.1
 # Rules Version: 0.2
 
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
@@ -265,13 +265,30 @@ class UltimateReconstructorV10:
             if "indentHangingTwip" in p_format:
                 _set_w_attr(ind, "hanging", _safe_int(p_format.get("indentHangingTwip")))
 
-        # spacing (if present in your extended p_format)
-        if any(k in p_format for k in ("spaceBeforeTwip", "spaceAfterTwip", "lineTwip", "lineRule")):
+        # spacing
+        if any(k in p_format for k in (
+            "spaceBeforeTwip",
+            "spaceAfterTwip",
+            "spaceBeforeLines",
+            "spaceAfterLines",
+            "beforeAutospacing",
+            "afterAutospacing",
+            "lineTwip",
+            "lineRule",
+        )):
             sp = _w_sub(pPr, "spacing")
             if "spaceBeforeTwip" in p_format:
                 _set_w_attr(sp, "before", _safe_int(p_format.get("spaceBeforeTwip")))
             if "spaceAfterTwip" in p_format:
                 _set_w_attr(sp, "after", _safe_int(p_format.get("spaceAfterTwip")))
+            if "spaceBeforeLines" in p_format:
+                _set_w_attr(sp, "beforeLines", _safe_int(p_format.get("spaceBeforeLines")))
+            if "spaceAfterLines" in p_format:
+                _set_w_attr(sp, "afterLines", _safe_int(p_format.get("spaceAfterLines")))
+            if "beforeAutospacing" in p_format:
+                _set_w_attr(sp, "beforeAutospacing", "1" if p_format.get("beforeAutospacing") else "0")
+            if "afterAutospacing" in p_format:
+                _set_w_attr(sp, "afterAutospacing", "1" if p_format.get("afterAutospacing") else "0")
             if "lineTwip" in p_format:
                 _set_w_attr(sp, "line", _safe_int(p_format.get("lineTwip")))
             lr = p_format.get("lineRule")

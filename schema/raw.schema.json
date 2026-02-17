@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Standard RAW JSON Schema v2.8.0 (Meta Versioning + Spacing Lines/Autospacing + Relational Styles/Numbering + Tabs + Page Setup + Extended Paragraph/Run Model)",
+  "title": "Standard RAW JSON Schema v2.8.1 (Meta Versioning + Spacing Lines/Autospacing + Relational Styles/Numbering + Tabs + Page Setup + Extended Paragraph/Run Model)",
   "type": "object",
   "required": ["meta", "document_info", "numbering_definitions", "styles", "content"],
   "additionalProperties": false,
@@ -393,7 +393,7 @@
             "additionalProperties": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["format", "template", "start"],
+              "required": ["format", "template"],
               "properties": {
                 "format": { "type": "string" },
                 "template": { "type": "string" },

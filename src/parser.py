@@ -1,7 +1,7 @@
 # UltimateParserV41.py
 # DOCX -> RAW JSON (schema v2.7.x / v2.8-ish) using lxml (NO python-docx)
 # Parser Version: v41
-# Schema Version: 2.8.0
+# Schema Version: 2.8.1
 # Rules Version: 0.2
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -199,20 +199,23 @@ class UltimateParserV41:
     # =========================
 
     def process(self) -> str:
+        settings: Dict[str, Any] = {}
+        default_tab_stop = self._parse_default_tab_stop()
+        if default_tab_stop is not None:
+            settings["defaultTabStopTwip"] = default_tab_stop
+
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.8.0",
-                "rules_version": "0.2",
-                "producer": {
-                    "name": "UltimateParserV41",
-                    "version": "v41"
-                }
-            },
+              "schema_version": "2.8.1",
+              "rules_version": "0.2",
+              "producer": {
+                "name": "UltimateParserV41",
+                "version": "v41"
+               }
+        },
             "document_info": {
                 "page_setup": self._parse_page_setup(),
-                "settings": {
-                    "defaultTabStopTwip": self._parse_default_tab_stop()
-                }
+                "settings": settings
             },
             "numbering_definitions": self._parse_numbering_definitions(),
             "styles": {},
@@ -494,8 +497,9 @@ class UltimateParserV41:
                 level_rec: Dict[str, Any] = {
                     "format": fmt,
                     "template": template,
-                    "start": st if st is not None else 1
                 }
+                if st is not None:
+                    level_rec["start"] = st
                 levels[str(ilvl)] = level_rec
 
             abstracts[abs_id] = {"levels": levels}
@@ -670,8 +674,21 @@ class UltimateParserV41:
         ta = pPr.find(qn("w:textAlignment"))
         if ta is not None:
             v = _str_attr(ta, "val")
-            if v:
-                out["textAlignment"] = v
+            text_align_map = {
+                "auto": "AUTO",
+                "baseline": "BASELINE",
+                "top": "TOP",
+                "center": "CENTER",
+                "bottom": "BOTTOM",
+                "AUTO": "AUTO",
+                "BASELINE": "BASELINE",
+                "TOP": "TOP",
+                "CENTER": "CENTER",
+                "BOTTOM": "BOTTOM",
+            }
+            mapped = text_align_map.get(v) if v is not None else None
+            if mapped is not None:
+                out["textAlignment"] = mapped
 
         return out
 
@@ -816,14 +833,16 @@ class UltimateParserV41:
 
                 elif node.tag == qn("w:br"):
                     run_obj: Dict[str, Any] = {"type": "break"}
+                    br_type = node.get(f"{{{W_NS}}}type")
+                    if br_type in ("textWrapping", "page", "column"):
+                        run_obj["break_type"] = br_type
                     if r_diff:
                         run_obj["diff"] = r_diff
                     out.append(run_obj)
                     first_emitted = True
 
                 elif node.tag == qn("w:cr"):
-                    # schema doesn't have separate "cr", represent as break
-                    run_obj: Dict[str, Any] = {"type": "break"}
+                    run_obj: Dict[str, Any] = {"type": "cr"}
                     if r_diff:
                         run_obj["diff"] = r_diff
                     out.append(run_obj)
