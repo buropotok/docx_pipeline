@@ -45,6 +45,13 @@ def _set_w_attr(el: etree._Element, local: str, val: Any) -> None:
     el.set(f"{{{W_NS}}}{local}", str(val))
 
 
+def _set_w_attr_int(el: etree._Element, local: str, val: Any) -> None:
+    iv = _safe_int(val)
+    if iv is None:
+        return
+    _set_w_attr(el, local, iv)
+
+
 def _needs_xml_preserve(text: str) -> bool:
     """
     Deterministic rule to keep visual spaces:
@@ -99,7 +106,7 @@ class UltimateReconstructorV10:
             self.data = json.load(f)
 
         # validate minimal keys (soft)
-        for k in ("document_info", "numbering_definitions", "styles", "content"):
+        for k in ("meta", "document_info", "numbering_definitions", "styles", "content"):
             if k not in self.data:
                 raise ValueError(f"RAW JSON missing required key: {k}")
 
@@ -210,7 +217,7 @@ class UltimateReconstructorV10:
 
                 elif rtype == "break":
                     br = _w_sub(r, "br")
-                    # optional break_type in extended schema (not in yours, but harmless if present)
+                    # optional break_type from RAW schema (textWrapping/page/column)
                     bt = run.get("break_type")
                     if bt in ("textWrapping", "page", "column"):
                         _set_w_attr(br, "type", bt)
@@ -257,13 +264,13 @@ class UltimateReconstructorV10:
         if any(k in p_format for k in ind_keys):
             ind = _w_sub(pPr, "ind")
             if "indentStartTwip" in p_format:
-                _set_w_attr(ind, "left", _safe_int(p_format.get("indentStartTwip")))
+                _set_w_attr_int(ind, "left", p_format.get("indentStartTwip"))
             if "indentEndTwip" in p_format:
-                _set_w_attr(ind, "right", _safe_int(p_format.get("indentEndTwip")))
+                _set_w_attr_int(ind, "right", p_format.get("indentEndTwip"))
             if "indentFirstLineTwip" in p_format:
-                _set_w_attr(ind, "firstLine", _safe_int(p_format.get("indentFirstLineTwip")))
+                _set_w_attr_int(ind, "firstLine", p_format.get("indentFirstLineTwip"))
             if "indentHangingTwip" in p_format:
-                _set_w_attr(ind, "hanging", _safe_int(p_format.get("indentHangingTwip")))
+                _set_w_attr_int(ind, "hanging", p_format.get("indentHangingTwip"))
 
         # spacing
         if any(k in p_format for k in (
@@ -278,19 +285,19 @@ class UltimateReconstructorV10:
         )):
             sp = _w_sub(pPr, "spacing")
             if "spaceBeforeTwip" in p_format:
-                _set_w_attr(sp, "before", _safe_int(p_format.get("spaceBeforeTwip")))
+                _set_w_attr_int(sp, "before", p_format.get("spaceBeforeTwip"))
             if "spaceAfterTwip" in p_format:
-                _set_w_attr(sp, "after", _safe_int(p_format.get("spaceAfterTwip")))
+                _set_w_attr_int(sp, "after", p_format.get("spaceAfterTwip"))
             if "spaceBeforeLines" in p_format:
-                _set_w_attr(sp, "beforeLines", _safe_int(p_format.get("spaceBeforeLines")))
+                _set_w_attr_int(sp, "beforeLines", p_format.get("spaceBeforeLines"))
             if "spaceAfterLines" in p_format:
-                _set_w_attr(sp, "afterLines", _safe_int(p_format.get("spaceAfterLines")))
+                _set_w_attr_int(sp, "afterLines", p_format.get("spaceAfterLines"))
             if "beforeAutospacing" in p_format:
                 _set_w_attr(sp, "beforeAutospacing", "1" if p_format.get("beforeAutospacing") else "0")
             if "afterAutospacing" in p_format:
                 _set_w_attr(sp, "afterAutospacing", "1" if p_format.get("afterAutospacing") else "0")
             if "lineTwip" in p_format:
-                _set_w_attr(sp, "line", _safe_int(p_format.get("lineTwip")))
+                _set_w_attr_int(sp, "line", p_format.get("lineTwip"))
             lr = p_format.get("lineRule")
             if lr == "AUTO":
                 _set_w_attr(sp, "lineRule", "auto")
@@ -323,11 +330,33 @@ class UltimateReconstructorV10:
             numId = num.get("numId")
             ilvl = num.get("ilvl")
             if numId is not None and ilvl is not None:
-                numPr = _w_sub(pPr, "numPr")
-                ilvl_el = _w_sub(numPr, "ilvl")
-                _set_w_attr(ilvl_el, "val", int(ilvl))
-                numId_el = _w_sub(numPr, "numId")
-                _set_w_attr(numId_el, "val", str(numId))
+                ilvl_int = _safe_int(ilvl)
+                if ilvl_int is not None:
+                    numPr = _w_sub(pPr, "numPr")
+                    ilvl_el = _w_sub(numPr, "ilvl")
+                    _set_w_attr(ilvl_el, "val", ilvl_int)
+                    numId_el = _w_sub(numPr, "numId")
+                    _set_w_attr(numId_el, "val", str(numId))
+
+        # boolean paragraph flags (emit explicit false as val="0")
+        for k, tag in (
+            ("keepNext", "keepNext"),
+            ("keepLines", "keepLines"),
+            ("pageBreakBefore", "pageBreakBefore"),
+            ("widowControl", "widowControl"),
+            ("snapToGrid", "snapToGrid"),
+            ("contextualSpacing", "contextualSpacing"),
+        ):
+            if k not in p_format:
+                continue
+            el = _w_sub(pPr, tag)
+            if p_format.get(k) is False:
+                _set_w_attr(el, "val", "0")
+
+        text_alignment = p_format.get("textAlignment")
+        if text_alignment in ("AUTO", "BASELINE", "TOP", "CENTER", "BOTTOM"):
+            ta = _w_sub(pPr, "textAlignment")
+            _set_w_attr(ta, "val", text_alignment.lower())
 
         return pPr
 
@@ -404,13 +433,17 @@ class UltimateReconstructorV10:
 
         # (optional extended) charSpacingTwip -> w:spacing
         if "charSpacingTwip" in r_format:
-            sp = _w_sub(rPr, "spacing")
-            _set_w_attr(sp, "val", _safe_int(r_format.get("charSpacingTwip")))
+            spv = _safe_int(r_format.get("charSpacingTwip"))
+            if spv is not None:
+                sp = _w_sub(rPr, "spacing")
+                _set_w_attr(sp, "val", spv)
 
         # (optional extended) positionHalfPoints -> w:position
         if "positionHalfPoints" in r_format:
-            pos = _w_sub(rPr, "position")
-            _set_w_attr(pos, "val", _safe_int(r_format.get("positionHalfPoints")))
+            posv = _safe_int(r_format.get("positionHalfPoints"))
+            if posv is not None:
+                pos = _w_sub(rPr, "position")
+                _set_w_attr(pos, "val", posv)
 
         return rPr
 
@@ -431,9 +464,9 @@ class UltimateReconstructorV10:
         if any(k in page_setup for k in ("pageWidthTwip", "pageHeightTwip", "orient")):
             pgSz = _w_sub(sectPr, "pgSz")
             if "pageWidthTwip" in page_setup:
-                _set_w_attr(pgSz, "w", _safe_int(page_setup.get("pageWidthTwip")))
+                _set_w_attr_int(pgSz, "w", page_setup.get("pageWidthTwip"))
             if "pageHeightTwip" in page_setup:
-                _set_w_attr(pgSz, "h", _safe_int(page_setup.get("pageHeightTwip")))
+                _set_w_attr_int(pgSz, "h", page_setup.get("pageHeightTwip"))
             orient = page_setup.get("orient")
             if orient in ("portrait", "landscape"):
                 _set_w_attr(pgSz, "orient", orient)
@@ -442,28 +475,28 @@ class UltimateReconstructorV10:
         if any(k in page_setup for k in ("marginLeftTwip", "marginRightTwip", "marginTopTwip", "marginBottomTwip", "headerTwip", "footerTwip", "gutterTwip")):
             pgMar = _w_sub(sectPr, "pgMar")
             if "marginTopTwip" in page_setup:
-                _set_w_attr(pgMar, "top", _safe_int(page_setup.get("marginTopTwip")))
+                _set_w_attr_int(pgMar, "top", page_setup.get("marginTopTwip"))
             if "marginRightTwip" in page_setup:
-                _set_w_attr(pgMar, "right", _safe_int(page_setup.get("marginRightTwip")))
+                _set_w_attr_int(pgMar, "right", page_setup.get("marginRightTwip"))
             if "marginBottomTwip" in page_setup:
-                _set_w_attr(pgMar, "bottom", _safe_int(page_setup.get("marginBottomTwip")))
+                _set_w_attr_int(pgMar, "bottom", page_setup.get("marginBottomTwip"))
             if "marginLeftTwip" in page_setup:
-                _set_w_attr(pgMar, "left", _safe_int(page_setup.get("marginLeftTwip")))
+                _set_w_attr_int(pgMar, "left", page_setup.get("marginLeftTwip"))
             if "headerTwip" in page_setup:
-                _set_w_attr(pgMar, "header", _safe_int(page_setup.get("headerTwip")))
+                _set_w_attr_int(pgMar, "header", page_setup.get("headerTwip"))
             if "footerTwip" in page_setup:
-                _set_w_attr(pgMar, "footer", _safe_int(page_setup.get("footerTwip")))
+                _set_w_attr_int(pgMar, "footer", page_setup.get("footerTwip"))
             if "gutterTwip" in page_setup:
-                _set_w_attr(pgMar, "gutter", _safe_int(page_setup.get("gutterTwip")))
+                _set_w_attr_int(pgMar, "gutter", page_setup.get("gutterTwip"))
 
         # cols
         cols = page_setup.get("cols")
         if isinstance(cols, dict) and cols:
             cols_el = _w_sub(sectPr, "cols")
             if "num" in cols:
-                _set_w_attr(cols_el, "num", _safe_int(cols.get("num")))
+                _set_w_attr_int(cols_el, "num", cols.get("num"))
             if "spaceTwip" in cols:
-                _set_w_attr(cols_el, "space", _safe_int(cols.get("spaceTwip")))
+                _set_w_attr_int(cols_el, "space", cols.get("spaceTwip"))
             if "equalWidth" in cols:
                 _set_w_attr(cols_el, "equalWidth", "1" if cols.get("equalWidth") else "0")
 
@@ -495,7 +528,7 @@ class UltimateReconstructorV10:
                     _set_w_attr(rf, k, v)
             if "font_size_half_points" in dd_r:
                 sz = _w_sub(rPr, "sz")
-                _set_w_attr(sz, "val", _safe_int(dd_r.get("font_size_half_points")))
+                _set_w_attr_int(sz, "val", dd_r.get("font_size_half_points"))
             if "lang" in dd_r:
                 lang = _w_sub(rPr, "lang")
                 for k, v in (dd_r.get("lang") or {}).items():
@@ -546,8 +579,11 @@ class UltimateReconstructorV10:
                 lvl_rec = levels[ilvl_str] or {}
                 lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
 
-                start = _w_sub(lvl_el, "start")
-                _set_w_attr(start, "val", _safe_int(lvl_rec.get("start", 1)) or 1)
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
 
                 numFmt = _w_sub(lvl_el, "numFmt")
                 _set_w_attr(numFmt, "val", lvl_rec.get("format", "decimal"))
@@ -576,8 +612,10 @@ class UltimateReconstructorV10:
                     ov = ovs[ilvl_str] or {}
                     lvlOv = _w_sub(num_el, "lvlOverride", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                     if "start" in ov:
-                        st = _w_sub(lvlOv, "startOverride")
-                        _set_w_attr(st, "val", _safe_int(ov.get("start")))
+                        ov_start = _safe_int(ov.get("start"))
+                        if ov_start is not None:
+                            st = _w_sub(lvlOv, "startOverride")
+                            _set_w_attr(st, "val", ov_start)
 
         return numbering
 
@@ -594,8 +632,10 @@ class UltimateReconstructorV10:
             dts = doc_settings.get("defaultTabStopTwip")
 
         if dts is not None:
-            el = _w_sub(settings, "defaultTabStop")
-            _set_w_attr(el, "val", _safe_int(dts))
+            dts_int = _safe_int(dts)
+            if dts_int is not None:
+                el = _w_sub(settings, "defaultTabStop")
+                _set_w_attr(el, "val", dts_int)
 
         return settings
 

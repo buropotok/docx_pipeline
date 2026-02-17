@@ -206,13 +206,13 @@ class UltimateParserV41:
 
         result: Dict[str, Any] = {
             "meta": {
-              "schema_version": "2.8.1",
-              "rules_version": "0.2",
-              "producer": {
-                "name": "UltimateParserV41",
-                "version": "v41"
-               }
-        },
+                "schema_version": "2.8.1",
+                "rules_version": "0.2",
+                "producer": {
+                    "name": "UltimateParserV41",
+                    "version": "v41"
+                }
+            },
             "document_info": {
                 "page_setup": self._parse_page_setup(),
                 "settings": settings
