@@ -10,10 +10,7 @@
 # 1) FIX: spacing autospacing flags parsed correctly from w:spacing attributes (not as child elements).
 # 2) ADD: spacing beforeLines/afterLines -> spaceBeforeLines/spaceAfterLines (if present).
 # 3) ADD BACK: rPr char spacing + position (charSpacingTwip, positionHalfPoints) that existed earlier.
-# 4) ADD: "materialize zeros" for spaceBeforeTwip/spaceAfterTwip in effective p_format when absent,
-#         so reconstructed "Normal" doesn't silently become Word default (8pt) on the other side.
-#         (This solves your "spaceAfterTwip not appearing" case when donor relies on implicit zeros.)
-# 5) ADD: meta.leading=true for the first tab run in a paragraph (schema supports meta.leading).
+# 4) ADD: meta.leading=true for the first tab run in a paragraph (schema supports meta.leading).
 #
 # Rules enforced:
 # - RULE-001: hanging -> indentHangingTwip
@@ -84,6 +81,20 @@ def _bool_from_attr(val: Optional[str]) -> Optional[bool]:
     return True
 
 
+def _map_line_rule(val: Optional[str]) -> Optional[str]:
+    if val is None:
+        return None
+    mapping = {
+        "auto": "AUTO",
+        "atLeast": "AT_LEAST",
+        "exact": "EXACT",
+        "AUTO": "AUTO",
+        "AT_LEAST": "AT_LEAST",
+        "EXACT": "EXACT",
+    }
+    return mapping.get(val)
+
+
 def _merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     """Shallow merge where b overrides a; skips None values in b."""
     out = dict(a)
@@ -149,10 +160,6 @@ class UltimateParserV41:
     are ignored (proofErr etc.).
     """
 
-    # If donor relies on implicit "0" paragraph spacing, materialize zeros so reconstructor
-    # can set them explicitly and avoid Word's UI defaults (e.g., 8pt after).
-    MATERIALIZE_SPACING_ZEROS = True
-
     def __init__(self, docx_path: str):
         self.docx_path = docx_path
 
@@ -193,6 +200,14 @@ class UltimateParserV41:
 
     def process(self) -> str:
         result: Dict[str, Any] = {
+            "meta": {
+                "schema_version": "2.8.0",
+                "rules_version": "0.2",
+                "producer": {
+                    "name": "UltimateParserV41",
+                    "version": "v41"
+                }
+            },
             "document_info": {
                 "page_setup": self._parse_page_setup(),
                 "settings": {
@@ -311,15 +326,6 @@ class UltimateParserV41:
 
         # direct pPr overrides
         base = _merge(base, self._parse_pPr(direct_pPr))
-
-        # IMPORTANT FIX for your case:
-        # if donor relies on implicit zeros for spacing, materialize them explicitly
-        # so reconstructor won't get Word default "8pt after".
-        if self.MATERIALIZE_SPACING_ZEROS:
-            if "spaceBeforeTwip" not in base:
-                base["spaceBeforeTwip"] = 0
-            if "spaceAfterTwip" not in base:
-                base["spaceAfterTwip"] = 0
 
         return base
 
@@ -583,7 +589,7 @@ class UltimateParserV41:
             beforeLines = _int_attr(spacing, "beforeLines")
             afterLines = _int_attr(spacing, "afterLines")
             line = _int_attr(spacing, "line")
-            lineRule = _str_attr(spacing, "lineRule")
+            lineRule = _map_line_rule(_str_attr(spacing, "lineRule"))
 
             # FIX: autospacing are ATTRIBUTES on w:spacing
             beforeAuto = _bool_from_attr(spacing.get(f"{{{W_NS}}}beforeAutospacing"))
@@ -600,9 +606,7 @@ class UltimateParserV41:
 
             if line is not None:
                 out["lineTwip"] = line
-            if lineRule:
-                # V41 said "keep lineRule as-is" BUT code previously normalized.
-                # Here we store the raw attribute value to avoid inventing enums.
+            if lineRule is not None:
                 out["lineRule"] = lineRule
 
             if beforeAuto is not None:
@@ -637,11 +641,6 @@ class UltimateParserV41:
                 num_val = _str_attr(numId, "val")
                 if ilvl_val is not None and num_val is not None:
                     out["numbering"] = {"numId": num_val, "ilvl": ilvl_val}
-
-        # hyphenation control (галка "запрет переноса слов")
-        sah = pPr.find(qn("w:suppressAutoHyphens"))
-        if sah is not None:
-            out["suppressAutoHyphens"] = _bool_present(sah)
 
         # keep/widow/etc
         kn = pPr.find(qn("w:keepNext"))
@@ -691,8 +690,7 @@ class UltimateParserV41:
         if rFonts is not None:
             rf: Dict[str, Any] = {}
             for k in ("ascii", "hAnsi", "eastAsia", "cs",
-                      "asciiTheme", "hAnsiTheme", "eastAsiaTheme", "csTheme",
-                      "hint"):
+                      "asciiTheme", "hAnsiTheme", "eastAsiaTheme", "csTheme"):
                 v = rFonts.get(f"{{{W_NS}}}{k}")
                 if v is not None:
                     rf[k] = v
