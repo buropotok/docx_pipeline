@@ -1,6 +1,6 @@
 # UltimateReconstructorV10.py
 # Reconstructor Version: v10
-# Schema Version: 2.8.1
+# Schema Version: 2.8.2
 # Rules Version: 0.2
 
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
@@ -22,6 +22,7 @@ CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 PR_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 NSMAP_W = {"w": W_NS, "r": R_NS}
+BASE_DIR = "."
 
 
 def qn_w(local: str) -> str:
@@ -110,10 +111,16 @@ class UltimateReconstructorV10:
             if k not in self.data:
                 raise ValueError(f"RAW JSON missing required key: {k}")
 
+        self.meta: Dict[str, Any] = self.data["meta"] or {}
         self.document_info: Dict[str, Any] = self.data["document_info"] or {}
         self.numbering_definitions: Dict[str, Any] = self.data["numbering_definitions"] or {}
         self.styles: Dict[str, Any] = self.data["styles"] or {}
         self.content: List[Dict[str, Any]] = self.data["content"] or []
+
+        self.default_style_id: Optional[str] = None
+        default_style_id = self.meta.get("default_style_id")
+        if isinstance(default_style_id, str) and default_style_id in self.styles:
+            self.default_style_id = default_style_id
 
     # =========================
     # PUBLIC
@@ -126,6 +133,7 @@ class UltimateReconstructorV10:
         document_xml = self._build_document_xml()
         styles_xml = self._build_styles_xml()
         numbering_xml = self._build_numbering_xml()
+
         settings_xml = self._build_settings_xml()
 
         # Relationships & content types
@@ -142,6 +150,9 @@ class UltimateReconstructorV10:
         package_files["_rels/.rels"] = self._serialize_xml(rels_root, standalone=True)
         package_files["word/_rels/document.xml.rels"] = self._serialize_xml(doc_rels, standalone=True)
         package_files["[Content_Types].xml"] = self._serialize_xml(content_types, standalone=True)
+
+        raw_reconstructed_dir = os.path.join(os.path.dirname(self.raw_json_path), "raw", "reconstructed")
+        self._dump_reconstructed_parts(package_files, raw_reconstructed_dir)
 
         # Write docx (zip)
         os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
@@ -516,8 +527,13 @@ class UltimateReconstructorV10:
     def _build_styles_xml(self) -> etree._Element:
         styles = etree.Element(qn_w("styles"), nsmap={"w": W_NS})
 
-        # docDefaults from most common style's r_format (deterministic)
-        dd_r = _pick_docdefaults_from_styles(self.styles, self.content)
+        # docDefaults from meta.default_style_id r_format when valid, otherwise fallback to most common style's r_format (deterministic)
+        use_default_style_id = self.default_style_id is not None and self.default_style_id in self.styles
+        if use_default_style_id:
+            dd_style = self.styles.get(self.default_style_id, {})
+            dd_r = dd_style.get("r_format", {}) if isinstance(dd_style, dict) else {}
+        else:
+            dd_r = _pick_docdefaults_from_styles(self.styles, self.content)
 
         docDefaults = _w_sub(styles, "docDefaults")
         rPrDefault = _w_sub(docDefaults, "rPrDefault")
@@ -549,6 +565,20 @@ class UltimateReconstructorV10:
         })
         name = _w_sub(st, "name")
         _set_w_attr(name, "val", "Normal")
+
+        if use_default_style_id:
+            normal_style = self.styles.get(self.default_style_id, {})
+            if isinstance(normal_style, dict):
+                normal_p = normal_style.get("p_format", {}) or {}
+                normal_r = normal_style.get("r_format", {}) or {}
+                if isinstance(normal_p, dict) and normal_p:
+                    pPr = self._build_pPr(normal_p)
+                    if pPr is not None:
+                        st.append(pPr)
+                if isinstance(normal_r, dict) and normal_r:
+                    rPr = self._build_rPr(normal_r)
+                    if rPr is not None:
+                        st.append(rPr)
 
         return styles
 
@@ -664,6 +694,17 @@ class UltimateReconstructorV10:
 
         return settings
 
+    def _dump_reconstructed_parts(self, package_files: Dict[str, bytes], out_root_dir: str) -> None:
+        os.makedirs(out_root_dir, exist_ok=True)
+        for name, data in sorted(package_files.items()):
+            if not (name.endswith(".xml") or name.endswith(".rels")):
+                continue
+            out_path = os.path.join(out_root_dir, name)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(data)
+
+
     # =========================
     # RELATIONSHIPS & CONTENT TYPES
     # =========================
@@ -763,8 +804,12 @@ class UltimateReconstructorV10:
 
 if __name__ == "__main__":
     try:
-        recon = UltimateReconstructorV10("E:/Buro_potok/tmp/donor_result_v4.1_plus.json")
-        recon.build_docx("E:/Buro_potok/tmp/reconstructed_v4.1_plus.docx")
+        input_json_name = "donor_v2.6.json"
+        input_json = os.path.join(BASE_DIR, input_json_name)
+        output_docx = os.path.join(BASE_DIR, os.path.splitext(input_json_name)[0] + "_reconstructed.docx")
+
+        recon = UltimateReconstructorV10(input_json)
+        recon.build_docx(output_docx)
         print("Реконструкция v4.1_plus завершена успешно!")
     except Exception:
         import traceback

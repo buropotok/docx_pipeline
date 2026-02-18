@@ -1,7 +1,7 @@
 # UltimateParserV41.py
 # DOCX -> RAW JSON (schema v2.7.x / v2.8-ish) using lxml (NO python-docx)
 # Parser Version: v41
-# Schema Version: 2.8.1
+# Schema Version: 2.8.2
 # Rules Version: 0.2
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import json
+import os
 import zipfile
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -31,6 +32,7 @@ from lxml import etree
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
+BASE_DIR = "."
 
 
 def qn(tag: str) -> str:
@@ -164,6 +166,12 @@ class UltimateParserV41:
         self.docx_path = docx_path
 
         with zipfile.ZipFile(docx_path, "r") as z:
+            self._docx_xml_parts: Dict[str, bytes] = {
+                name: z.read(name)
+                for name in z.namelist()
+                if name.endswith(".xml")
+            }
+
             self.document_xml = etree.fromstring(z.read("word/document.xml"))
 
             try:
@@ -203,10 +211,9 @@ class UltimateParserV41:
         default_tab_stop = self._parse_default_tab_stop()
         if default_tab_stop is not None:
             settings["defaultTabStopTwip"] = default_tab_stop
-
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.8.1",
+                "schema_version": "2.8.2",
                 "rules_version": "0.2",
                 "producer": {
                     "name": "UltimateParserV41",
@@ -223,7 +230,14 @@ class UltimateParserV41:
         }
 
         body = self.document_xml.find(qn("w:body"))
+        default_word_style_id = self._get_default_word_paragraph_style_id()
+
         if body is None:
+            if default_word_style_id is not None:
+                default_p_format = self._effective_p_format(default_word_style_id, None)
+                default_r_format = self._effective_r_format(default_word_style_id)
+                default_style_id = self._register_out_style(default_p_format, default_r_format)
+                result["meta"]["default_style_id"] = default_style_id
             result["styles"] = self.out_styles
             return json.dumps(result, ensure_ascii=False, indent=2)
 
@@ -254,6 +268,12 @@ class UltimateParserV41:
                 "style_id": style_id,
                 "runs": runs
             })
+
+        if default_word_style_id is not None:
+            default_p_format = self._effective_p_format(default_word_style_id, None)
+            default_r_format = self._effective_r_format(default_word_style_id)
+            default_style_id = self._register_out_style(default_p_format, default_r_format)
+            result["meta"]["default_style_id"] = default_style_id
 
         result["styles"] = self.out_styles
         return json.dumps(result, ensure_ascii=False, indent=2)
@@ -308,6 +328,16 @@ class UltimateParserV41:
 
             if is_default in ("1", "true"):
                 self.default_paragraph_style_id = st_id
+
+    def _get_default_word_paragraph_style_id(self) -> Optional[str]:
+        if self.styles_xml is not None:
+            for st in self.styles_xml.findall(qn("w:style")):
+                st_type = _str_attr(st, "type")
+                st_id = _str_attr(st, "styleId")
+                is_default = _str_attr(st, "default")
+                if st_type == "paragraph" and st_id and is_default in ("1", "true"):
+                    return st_id
+        return self.default_paragraph_style_id
 
     def _get_p_style_id(self, pPr: Optional[etree._Element]) -> Optional[str]:
         if pPr is None:
@@ -863,12 +893,30 @@ class UltimateParserV41:
 
         return out
 
+    def dump_donor_xml_parts(self, out_root_dir: str) -> None:
+        os.makedirs(out_root_dir, exist_ok=True)
+        for name, data in sorted(self._docx_xml_parts.items()):
+            out_path = os.path.join(out_root_dir, name)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(data)
+
+
 
 if __name__ == "__main__":
     try:
-        parser = UltimateParserV41("E:/Buro_potok/tmp/donor_v2.6.docx")
-        with open("E:/Buro_potok/tmp/donor_result_v4.1_plus.json", "w", encoding="utf-8") as f:
+        input_name = "donor_v2.6.docx"
+        input_docx = os.path.join(BASE_DIR, input_name)
+
+        parser = UltimateParserV41(input_docx)
+
+        out_json = os.path.join(BASE_DIR, os.path.splitext(input_name)[0] + ".json")
+        with open(out_json, "w", encoding="utf-8") as f:
             f.write(parser.process())
+
+        raw_donor_dir = os.path.join(os.path.dirname(out_json), "raw", "donor")
+        parser.dump_donor_xml_parts(raw_donor_dir)
+
         print("Парсинг v4.1+ (lxml) завершен успешно!")
     except Exception:
         import traceback

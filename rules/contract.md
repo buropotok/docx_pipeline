@@ -1,5 +1,5 @@
 Reconstruction Contract v0.2
-(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.1)
+(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.2)
 
 0. Versioning
 - RAW JSON MUST declare:
@@ -7,7 +7,7 @@ Reconstruction Contract v0.2
   meta.rules_version
 - This contract corresponds to:
   rules_version = "0.2"
-  schema_version = "2.8.1"
+  schema_version = "2.8.2"
 
 1. General Principles
 1.1 Goal
@@ -22,7 +22,7 @@ Reconstruction Contract v0.2
 
 1.3 Scope (v0.2)
 Included:
-- Paragraphs (<w:p>) with runs (<w:r>) and tokens <w:t>, <w:tab/>, <w:br/>, <w:sym/>
+- Paragraphs (<w:p>) with runs (<w:r>) and tokens <w:t>, <w:tab/>, <w:br/>, <w:cr/>, <w:sym/>
 - Basic paragraph formatting: alignment, indents, spacing, tabs, numbering refs
 - Basic run formatting: fonts, size, bold/italic/underline/caps/color/vertAlign/lang/charSpacing/position
 - Single-section page setup (sectPr: pgSz/pgMar/cols)
@@ -83,6 +83,12 @@ Supported spacing fields in RAW p_format:
   lineTwip, lineRule
 If a field is not present in OOXML, it MUST NOT be synthesized into RAW.
 
+RULE-P-007 — Default Base Style Mapping
+Parser MUST set `meta.default_style_id` to the internal RAW style_id that corresponds to Word default paragraph style (`w:style` with `w:type="paragraph"` and `w:default="1"/"true"`).
+The mapping MUST be based on effective formatting (docDefaults + style chain + that style's own pPr/rPr), then registered through the RAW styles library.
+This field does not bind content style_id values to Word `styleId`; it only selects the RAW base style used for generating Word Normal style.
+
+
 3. Reconstruction Rules (RAW → DOCX)
 
 RULE-R-001 — Deterministic Reconstruction
@@ -130,6 +136,7 @@ Supported run types in UltimateReconstructorV10:
 - text  -> <w:t>
 - tab   -> <w:tab/>
 - break -> <w:br/> and optional @w:type from run.break_type if provided and valid
+- cr    -> <w:cr/>
 - sym   -> emitted as <w:t> with literal text (best-effort in this version)
 Token order MUST match RAW order exactly.
 
@@ -154,7 +161,9 @@ RULE-R-009 — Package Parts
 Reconstructor MUST write:
 - word/document.xml
 - word/styles.xml (minimal Normal + docDefaults run properties)
-- word/settings.xml (defaultTabStop if present)
+  - Reconstructor MUST use meta.default_style_id (if present and valid) to build default paragraph style Normal with pPr from styles[default_style_id].p_format and may include rPr from styles[default_style_id].r_format.
+  - If meta.default_style_id is missing or invalid, current minimal fallback behavior is used.
+- word/settings.xml (minimal settings.xml with defaultTabStop if present)
 - word/numbering.xml only if numbering_definitions non-empty
 And the required relationships and [Content_Types].xml deterministically.
 
