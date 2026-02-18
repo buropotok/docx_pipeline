@@ -4,7 +4,7 @@ Deterministic DOCX ↔ RAW JSON pipeline for "forms" subset documents.
 
 Current Versions:
 
-- Schema: 2.8.0
+- Schema: 2.8.1
 - Rules: 0.2
 - Reconstructor: UltimateReconstructorV10
 - Parser: (see src/parser.py version header)
@@ -143,3 +143,21 @@ Implementation must catch up — schema must not be reduced.
 
 ```bash
 python src/reconstructor.py
+
+---
+
+## Windows pipeline (Word materialize -> parse -> enrich -> reconstruct)
+
+Requirements:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run:
+
+```bash
+python tools/run_pipeline.py donor.docx
+```
+
+Note: Windows only, with installed Microsoft Word.
