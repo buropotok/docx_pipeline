@@ -1,5 +1,5 @@
 Reconstruction Contract v0.2
-(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.0)
+(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.1)
 
 0. Versioning
 - RAW JSON MUST declare:
@@ -7,7 +7,7 @@ Reconstruction Contract v0.2
   meta.rules_version
 - This contract corresponds to:
   rules_version = "0.2"
-  schema_version = "2.8.0"
+  schema_version = "2.8.1"
 
 1. General Principles
 1.1 Goal
@@ -83,6 +83,15 @@ Supported spacing fields in RAW p_format:
   lineTwip, lineRule
 If a field is not present in OOXML, it MUST NOT be synthesized into RAW.
 
+RULE-P-007 — settings.xml Opaque Passthrough Capture
+If source DOCX contains `word/settings.xml`:
+- Parser MUST store its verbatim UTF-8 string content into:
+  document_info.settings.raw_settings_xml
+- This payload is opaque infrastructure data and is not intended for AI normalization/editing.
+If `word/settings.xml` is absent:
+- Parser MUST NOT synthesize `raw_settings_xml`.
+
+
 3. Reconstruction Rules (RAW → DOCX)
 
 RULE-R-001 — Deterministic Reconstruction
@@ -146,7 +155,7 @@ Therefore, for deterministic reconstruction with V10, producers SHOULD omit p_ov
 
 RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V10
 Run types allowed by schema but ignored by UltimateReconstructorV10:
-- cr, softHyphen, noBreakHyphen
+- softHyphen, noBreakHyphen
 If present, they do not contribute to reconstructed XML in this version.
 For strict 1:1 determinism with V10, producers MUST NOT emit these run types.
 
@@ -154,7 +163,9 @@ RULE-R-009 — Package Parts
 Reconstructor MUST write:
 - word/document.xml
 - word/styles.xml (minimal Normal + docDefaults run properties)
-- word/settings.xml (defaultTabStop if present)
+- word/settings.xml:
+  - if document_info.settings.raw_settings_xml is present -> write it verbatim (passthrough)
+  - otherwise emit minimal settings.xml (defaultTabStop if present)
 - word/numbering.xml only if numbering_definitions non-empty
 And the required relationships and [Content_Types].xml deterministically.
 

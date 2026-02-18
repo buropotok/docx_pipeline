@@ -1,6 +1,6 @@
 # UltimateReconstructorV10.py
 # Reconstructor Version: v10
-# Schema Version: 2.8.0
+# Schema Version: 2.8.1
 # Rules Version: 0.2
 
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
@@ -22,6 +22,7 @@ CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 PR_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 NSMAP_W = {"w": W_NS, "r": R_NS}
+BASE_DIR = "."
 
 
 def qn_w(local: str) -> str:
@@ -43,6 +44,13 @@ def _w_sub(parent: etree._Element, tag_local: str, attrib: Optional[Dict[str, st
 
 def _set_w_attr(el: etree._Element, local: str, val: Any) -> None:
     el.set(f"{{{W_NS}}}{local}", str(val))
+
+
+def _set_w_attr_int(el: etree._Element, local: str, val: Any) -> None:
+    iv = _safe_int(val)
+    if iv is None:
+        return
+    _set_w_attr(el, local, iv)
 
 
 def _needs_xml_preserve(text: str) -> bool:
@@ -99,7 +107,7 @@ class UltimateReconstructorV10:
             self.data = json.load(f)
 
         # validate minimal keys (soft)
-        for k in ("document_info", "numbering_definitions", "styles", "content"):
+        for k in ("meta", "document_info", "numbering_definitions", "styles", "content"):
             if k not in self.data:
                 raise ValueError(f"RAW JSON missing required key: {k}")
 
@@ -119,7 +127,15 @@ class UltimateReconstructorV10:
         document_xml = self._build_document_xml()
         styles_xml = self._build_styles_xml()
         numbering_xml = self._build_numbering_xml()
-        settings_xml = self._build_settings_xml()
+
+        settings_raw_xml = None
+        doc_settings = self.document_info.get("settings") or {}
+        if isinstance(doc_settings, dict):
+            raw_settings_xml = doc_settings.get("raw_settings_xml")
+            if isinstance(raw_settings_xml, str) and raw_settings_xml:
+                settings_raw_xml = raw_settings_xml.encode("utf-8")
+
+        settings_xml = None if settings_raw_xml is not None else self._build_settings_xml()
 
         # Relationships & content types
         rels_root = self._build_root_rels()
@@ -128,13 +144,16 @@ class UltimateReconstructorV10:
 
         package_files["word/document.xml"] = self._serialize_xml(document_xml, standalone=True)
         package_files["word/styles.xml"] = self._serialize_xml(styles_xml, standalone=True)
-        package_files["word/settings.xml"] = self._serialize_xml(settings_xml, standalone=True)
+        package_files["word/settings.xml"] = settings_raw_xml if settings_raw_xml is not None else self._serialize_xml(settings_xml, standalone=True)
         if self.numbering_definitions:
             package_files["word/numbering.xml"] = self._serialize_xml(numbering_xml, standalone=True)
 
         package_files["_rels/.rels"] = self._serialize_xml(rels_root, standalone=True)
         package_files["word/_rels/document.xml.rels"] = self._serialize_xml(doc_rels, standalone=True)
         package_files["[Content_Types].xml"] = self._serialize_xml(content_types, standalone=True)
+
+        raw_reconstructed_dir = os.path.join(os.path.dirname(self.raw_json_path), "raw", "reconstructed")
+        self._dump_reconstructed_parts(package_files, raw_reconstructed_dir)
 
         # Write docx (zip)
         os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
@@ -187,16 +206,18 @@ class UltimateReconstructorV10:
                 continue
 
             for run in runs:
-                r = _w_sub(p, "r")
+                rtype = run.get("type")
+                if rtype not in ("text", "tab", "break", "sym", "cr"):
+                    # unsupported run types do not contribute in v10 (RULE-RUN-UNSUPPORTED)
+                    continue
 
+                r = _w_sub(p, "r")
                 diff = run.get("diff", {}) or {}
                 effective_r = self._merge_formats(base_r, diff)
 
                 rPr = self._build_rPr(effective_r)
                 if rPr is not None:
                     r.append(rPr)
-
-                rtype = run.get("type")
 
                 if rtype == "text":
                     txt = run.get("text", "")
@@ -210,10 +231,13 @@ class UltimateReconstructorV10:
 
                 elif rtype == "break":
                     br = _w_sub(r, "br")
-                    # optional break_type in extended schema (not in yours, but harmless if present)
+                    # optional break_type from RAW schema (textWrapping/page/column)
                     bt = run.get("break_type")
                     if bt in ("textWrapping", "page", "column"):
                         _set_w_attr(br, "type", bt)
+
+                elif rtype == "cr":
+                    _w_sub(r, "cr")
 
                 elif rtype == "sym":
                     # In your schema: sym.text is a string; we treat it as literal char if possible.
@@ -226,8 +250,8 @@ class UltimateReconstructorV10:
                     t.text = sym_text
 
                 else:
-                    # unknown run types are ignored in this subset
-                    pass
+                    # unreachable due to early type guard
+                    continue
 
         # sectPr from document_info.page_setup (must exist per your requirement)
         sectPr = self._build_sectPr(self.document_info.get("page_setup", {}) or {})
@@ -257,23 +281,40 @@ class UltimateReconstructorV10:
         if any(k in p_format for k in ind_keys):
             ind = _w_sub(pPr, "ind")
             if "indentStartTwip" in p_format:
-                _set_w_attr(ind, "left", _safe_int(p_format.get("indentStartTwip")))
+                _set_w_attr_int(ind, "left", p_format.get("indentStartTwip"))
             if "indentEndTwip" in p_format:
-                _set_w_attr(ind, "right", _safe_int(p_format.get("indentEndTwip")))
+                _set_w_attr_int(ind, "right", p_format.get("indentEndTwip"))
             if "indentFirstLineTwip" in p_format:
-                _set_w_attr(ind, "firstLine", _safe_int(p_format.get("indentFirstLineTwip")))
+                _set_w_attr_int(ind, "firstLine", p_format.get("indentFirstLineTwip"))
             if "indentHangingTwip" in p_format:
-                _set_w_attr(ind, "hanging", _safe_int(p_format.get("indentHangingTwip")))
+                _set_w_attr_int(ind, "hanging", p_format.get("indentHangingTwip"))
 
-        # spacing (if present in your extended p_format)
-        if any(k in p_format for k in ("spaceBeforeTwip", "spaceAfterTwip", "lineTwip", "lineRule")):
+        # spacing
+        if any(k in p_format for k in (
+            "spaceBeforeTwip",
+            "spaceAfterTwip",
+            "spaceBeforeLines",
+            "spaceAfterLines",
+            "beforeAutospacing",
+            "afterAutospacing",
+            "lineTwip",
+            "lineRule",
+        )):
             sp = _w_sub(pPr, "spacing")
             if "spaceBeforeTwip" in p_format:
-                _set_w_attr(sp, "before", _safe_int(p_format.get("spaceBeforeTwip")))
+                _set_w_attr_int(sp, "before", p_format.get("spaceBeforeTwip"))
             if "spaceAfterTwip" in p_format:
-                _set_w_attr(sp, "after", _safe_int(p_format.get("spaceAfterTwip")))
+                _set_w_attr_int(sp, "after", p_format.get("spaceAfterTwip"))
+            if "spaceBeforeLines" in p_format:
+                _set_w_attr_int(sp, "beforeLines", p_format.get("spaceBeforeLines"))
+            if "spaceAfterLines" in p_format:
+                _set_w_attr_int(sp, "afterLines", p_format.get("spaceAfterLines"))
+            if "beforeAutospacing" in p_format:
+                _set_w_attr(sp, "beforeAutospacing", "1" if p_format.get("beforeAutospacing") else "0")
+            if "afterAutospacing" in p_format:
+                _set_w_attr(sp, "afterAutospacing", "1" if p_format.get("afterAutospacing") else "0")
             if "lineTwip" in p_format:
-                _set_w_attr(sp, "line", _safe_int(p_format.get("lineTwip")))
+                _set_w_attr_int(sp, "line", p_format.get("lineTwip"))
             lr = p_format.get("lineRule")
             if lr == "AUTO":
                 _set_w_attr(sp, "lineRule", "auto")
@@ -306,11 +347,33 @@ class UltimateReconstructorV10:
             numId = num.get("numId")
             ilvl = num.get("ilvl")
             if numId is not None and ilvl is not None:
-                numPr = _w_sub(pPr, "numPr")
-                ilvl_el = _w_sub(numPr, "ilvl")
-                _set_w_attr(ilvl_el, "val", int(ilvl))
-                numId_el = _w_sub(numPr, "numId")
-                _set_w_attr(numId_el, "val", str(numId))
+                ilvl_int = _safe_int(ilvl)
+                if ilvl_int is not None:
+                    numPr = _w_sub(pPr, "numPr")
+                    ilvl_el = _w_sub(numPr, "ilvl")
+                    _set_w_attr(ilvl_el, "val", ilvl_int)
+                    numId_el = _w_sub(numPr, "numId")
+                    _set_w_attr(numId_el, "val", str(numId))
+
+        # boolean paragraph flags (emit explicit false as val="0")
+        for k, tag in (
+            ("keepNext", "keepNext"),
+            ("keepLines", "keepLines"),
+            ("pageBreakBefore", "pageBreakBefore"),
+            ("widowControl", "widowControl"),
+            ("snapToGrid", "snapToGrid"),
+            ("contextualSpacing", "contextualSpacing"),
+        ):
+            if k not in p_format:
+                continue
+            el = _w_sub(pPr, tag)
+            if p_format.get(k) is False:
+                _set_w_attr(el, "val", "0")
+
+        text_alignment = p_format.get("textAlignment")
+        if text_alignment in ("AUTO", "BASELINE", "TOP", "CENTER", "BOTTOM"):
+            ta = _w_sub(pPr, "textAlignment")
+            _set_w_attr(ta, "val", text_alignment.lower())
 
         return pPr
 
@@ -387,13 +450,17 @@ class UltimateReconstructorV10:
 
         # (optional extended) charSpacingTwip -> w:spacing
         if "charSpacingTwip" in r_format:
-            sp = _w_sub(rPr, "spacing")
-            _set_w_attr(sp, "val", _safe_int(r_format.get("charSpacingTwip")))
+            spv = _safe_int(r_format.get("charSpacingTwip"))
+            if spv is not None:
+                sp = _w_sub(rPr, "spacing")
+                _set_w_attr(sp, "val", spv)
 
         # (optional extended) positionHalfPoints -> w:position
         if "positionHalfPoints" in r_format:
-            pos = _w_sub(rPr, "position")
-            _set_w_attr(pos, "val", _safe_int(r_format.get("positionHalfPoints")))
+            posv = _safe_int(r_format.get("positionHalfPoints"))
+            if posv is not None:
+                pos = _w_sub(rPr, "position")
+                _set_w_attr(pos, "val", posv)
 
         return rPr
 
@@ -414,9 +481,9 @@ class UltimateReconstructorV10:
         if any(k in page_setup for k in ("pageWidthTwip", "pageHeightTwip", "orient")):
             pgSz = _w_sub(sectPr, "pgSz")
             if "pageWidthTwip" in page_setup:
-                _set_w_attr(pgSz, "w", _safe_int(page_setup.get("pageWidthTwip")))
+                _set_w_attr_int(pgSz, "w", page_setup.get("pageWidthTwip"))
             if "pageHeightTwip" in page_setup:
-                _set_w_attr(pgSz, "h", _safe_int(page_setup.get("pageHeightTwip")))
+                _set_w_attr_int(pgSz, "h", page_setup.get("pageHeightTwip"))
             orient = page_setup.get("orient")
             if orient in ("portrait", "landscape"):
                 _set_w_attr(pgSz, "orient", orient)
@@ -425,28 +492,28 @@ class UltimateReconstructorV10:
         if any(k in page_setup for k in ("marginLeftTwip", "marginRightTwip", "marginTopTwip", "marginBottomTwip", "headerTwip", "footerTwip", "gutterTwip")):
             pgMar = _w_sub(sectPr, "pgMar")
             if "marginTopTwip" in page_setup:
-                _set_w_attr(pgMar, "top", _safe_int(page_setup.get("marginTopTwip")))
+                _set_w_attr_int(pgMar, "top", page_setup.get("marginTopTwip"))
             if "marginRightTwip" in page_setup:
-                _set_w_attr(pgMar, "right", _safe_int(page_setup.get("marginRightTwip")))
+                _set_w_attr_int(pgMar, "right", page_setup.get("marginRightTwip"))
             if "marginBottomTwip" in page_setup:
-                _set_w_attr(pgMar, "bottom", _safe_int(page_setup.get("marginBottomTwip")))
+                _set_w_attr_int(pgMar, "bottom", page_setup.get("marginBottomTwip"))
             if "marginLeftTwip" in page_setup:
-                _set_w_attr(pgMar, "left", _safe_int(page_setup.get("marginLeftTwip")))
+                _set_w_attr_int(pgMar, "left", page_setup.get("marginLeftTwip"))
             if "headerTwip" in page_setup:
-                _set_w_attr(pgMar, "header", _safe_int(page_setup.get("headerTwip")))
+                _set_w_attr_int(pgMar, "header", page_setup.get("headerTwip"))
             if "footerTwip" in page_setup:
-                _set_w_attr(pgMar, "footer", _safe_int(page_setup.get("footerTwip")))
+                _set_w_attr_int(pgMar, "footer", page_setup.get("footerTwip"))
             if "gutterTwip" in page_setup:
-                _set_w_attr(pgMar, "gutter", _safe_int(page_setup.get("gutterTwip")))
+                _set_w_attr_int(pgMar, "gutter", page_setup.get("gutterTwip"))
 
         # cols
         cols = page_setup.get("cols")
         if isinstance(cols, dict) and cols:
             cols_el = _w_sub(sectPr, "cols")
             if "num" in cols:
-                _set_w_attr(cols_el, "num", _safe_int(cols.get("num")))
+                _set_w_attr_int(cols_el, "num", cols.get("num"))
             if "spaceTwip" in cols:
-                _set_w_attr(cols_el, "space", _safe_int(cols.get("spaceTwip")))
+                _set_w_attr_int(cols_el, "space", cols.get("spaceTwip"))
             if "equalWidth" in cols:
                 _set_w_attr(cols_el, "equalWidth", "1" if cols.get("equalWidth") else "0")
 
@@ -478,7 +545,7 @@ class UltimateReconstructorV10:
                     _set_w_attr(rf, k, v)
             if "font_size_half_points" in dd_r:
                 sz = _w_sub(rPr, "sz")
-                _set_w_attr(sz, "val", _safe_int(dd_r.get("font_size_half_points")))
+                _set_w_attr_int(sz, "val", dd_r.get("font_size_half_points"))
             if "lang" in dd_r:
                 lang = _w_sub(rPr, "lang")
                 for k, v in (dd_r.get("lang") or {}).items():
@@ -525,18 +592,28 @@ class UltimateReconstructorV10:
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
             # levels keys are strings of ints
-            for ilvl_str in sorted(levels.keys(), key=lambda s: int(s)):
+            for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                 lvl_rec = levels[ilvl_str] or {}
-                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                fmt = lvl_rec.get("format")
+                if not isinstance(fmt, str):
+                    continue
 
-                start = _w_sub(lvl_el, "start")
-                _set_w_attr(start, "val", _safe_int(lvl_rec.get("start", 1)) or 1)
+                template = lvl_rec.get("template")
+                if not isinstance(template, str):
+                    continue
+
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
 
                 numFmt = _w_sub(lvl_el, "numFmt")
-                _set_w_attr(numFmt, "val", lvl_rec.get("format", "decimal"))
+                _set_w_attr(numFmt, "val", fmt)
 
                 lvlText = _w_sub(lvl_el, "lvlText")
-                _set_w_attr(lvlText, "val", lvl_rec.get("template", "%1."))
+                _set_w_attr(lvlText, "val", template)
 
                 # minimal; can be extended later (lvlJc/pPr/rPr)
 
@@ -555,12 +632,14 @@ class UltimateReconstructorV10:
             # lvl overrides
             ovs = rec.get("lvl_overrides", {}) or {}
             if isinstance(ovs, dict) and ovs:
-                for ilvl_str in sorted(ovs.keys(), key=lambda s: int(s)):
+                for ilvl_str in sorted(ovs.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                     ov = ovs[ilvl_str] or {}
-                    lvlOv = _w_sub(num_el, "lvlOverride", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                     if "start" in ov:
-                        st = _w_sub(lvlOv, "startOverride")
-                        _set_w_attr(st, "val", _safe_int(ov.get("start")))
+                        ov_start = _safe_int(ov.get("start"))
+                        if ov_start is not None:
+                            lvlOv = _w_sub(num_el, "lvlOverride", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                            st = _w_sub(lvlOv, "startOverride")
+                            _set_w_attr(st, "val", ov_start)
 
         return numbering
 
@@ -577,10 +656,23 @@ class UltimateReconstructorV10:
             dts = doc_settings.get("defaultTabStopTwip")
 
         if dts is not None:
-            el = _w_sub(settings, "defaultTabStop")
-            _set_w_attr(el, "val", _safe_int(dts))
+            dts_int = _safe_int(dts)
+            if dts_int is not None:
+                el = _w_sub(settings, "defaultTabStop")
+                _set_w_attr(el, "val", dts_int)
 
         return settings
+
+    def _dump_reconstructed_parts(self, package_files: Dict[str, bytes], out_root_dir: str) -> None:
+        os.makedirs(out_root_dir, exist_ok=True)
+        for name, data in sorted(package_files.items()):
+            if not (name.endswith(".xml") or name.endswith(".rels")):
+                continue
+            out_path = os.path.join(out_root_dir, name)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(data)
+
 
     # =========================
     # RELATIONSHIPS & CONTENT TYPES
@@ -681,8 +773,12 @@ class UltimateReconstructorV10:
 
 if __name__ == "__main__":
     try:
-        recon = UltimateReconstructorV10("E:/Buro_potok/tmp/donor_result_v4.1_plus.json")
-        recon.build_docx("E:/Buro_potok/tmp/reconstructed_v4.1_plus.docx")
+        input_json_name = "donor_v2.6.json"
+        input_json = os.path.join(BASE_DIR, input_json_name)
+        output_docx = os.path.join(BASE_DIR, os.path.splitext(input_json_name)[0] + "_reconstructed.docx")
+
+        recon = UltimateReconstructorV10(input_json)
+        recon.build_docx(output_docx)
         print("Реконструкция v4.1_plus завершена успешно!")
     except Exception:
         import traceback
