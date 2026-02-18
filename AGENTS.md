@@ -31,7 +31,7 @@ No visual optimization is allowed.
 
 Pipeline:
 
-    DOCX → Parser → RAW JSON → Reconstructor → DOCX
+    DOCX → Word SaveAs (materialize) → Parser → Effective Materializer → RAW JSON → Reconstructor → DOCX
 
 Key components:
 
@@ -142,9 +142,11 @@ Do NOT implement unless version is bumped:
 - Advanced style inheritance
 
 Run types allowed by schema but NOT reconstructed:
-- cr
 - softHyphen
 - noBreakHyphen
+
+Run type supported end-to-end (parse + reconstruct):
+- cr
 
 If implementing them:
 - bump Schema + Rules version

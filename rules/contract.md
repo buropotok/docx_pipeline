@@ -8,6 +8,8 @@ Reconstruction Contract v0.2
 - This contract corresponds to:
   rules_version = "0.2"
   schema_version = "2.8.2"
+  parser_version = "v41"
+  reconstructor_version = "v10"
 
 1. General Principles
 1.1 Goal
@@ -32,7 +34,7 @@ Excluded / not guaranteed for deterministic behavior in this version:
 - Tables, drawings/images/shapes, fields, hyperlinks, headers/footers, footnotes/endnotes
 - Complex section breaks beyond one terminal sectPr
 - Advanced style inheritance beyond what the parser explicitly resolves into RAW
-- Run token types: cr, softHyphen, noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV10 (see RULE-RUN-UNSUPPORTED)
+- Run token types softHyphen and noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV10 (see RULE-RUN-COMPATIBILITY and RULE-RUN-UNSUPPORTED)
 
 2. Parsing Rules (DOCX → RAW)
 
@@ -47,7 +49,7 @@ RULE-P-002 — Token Order Integrity
 During parsing:
 - <w:r> elements MUST NOT be merged.
 - Token order MUST be preserved exactly for:
-  <w:t>, <w:tab/>, <w:br/>, <w:sym/>
+  <w:t>, <w:tab/>, <w:br/>, <w:cr/>, <w:sym/>
 - Non-run or non-token elements MAY be ignored but MUST NOT affect token order.
 
 RULE-P-003 — Whitespace Preservation (RAW text)
@@ -150,6 +152,15 @@ RULE-R-OVERRIDE-NYI — Paragraph Overrides Not Yet Implemented
 content[].p_override is reserved by schema.
 UltimateReconstructorV10 does not apply p_override in this version.
 Therefore, for deterministic reconstruction with V10, producers SHOULD omit p_override or keep it empty.
+
+RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v41 + Reconstructor v10)
+End-to-end parsed and reconstructed run types:
+- text, tab, break, cr, sym
+Parsed but not reconstructed:
+- none in current supported set
+Schema-allowed but not reconstructed:
+- softHyphen, noBreakHyphen
+Unsupported/non-target run content remains outside current deterministic scope.
 
 RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V10
 Run types allowed by schema but ignored by UltimateReconstructorV10:
