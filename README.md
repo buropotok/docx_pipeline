@@ -161,3 +161,17 @@ python tools/run_pipeline.py donor.docx
 ```
 
 Note: Windows only, with installed Microsoft Word.
+
+
+
+## Official deterministic pipeline (Windows target flow)
+
+0) Word SaveAs materialization: `donor.docx -> donor.materialized.docx`  
+1) XML Parser: `donor.materialized.docx -> donor.json`  
+2) Effective materializer (Word COM enrichment): `donor.materialized.docx + donor.json -> donor.effective.json`  
+   - fill holes only, no overwrite of already parsed values  
+3) Reconstructor: `donor.effective.json -> donor.reconstructed.docx`
+
+For target documents, visual 1:1 geometry guarantee applies to reconstructor input `donor.effective.json`.
+SaveAs and enrichment are mandatory parts of the official pipeline for cases where source OOXML does not serialize effective Word defaults completely.
+

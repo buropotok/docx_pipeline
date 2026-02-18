@@ -228,3 +228,16 @@ No breaking changes without explicit version bump.
 ---
 
 END OF AGENTS MANIFEST
+
+
+## 13. Operational Notes
+
+Official pipeline artifacts are stored in the working directory for each donor:
+- donor.materialized.docx
+- donor.json
+- donor.effective.json
+- donor.reconstructed.docx
+
+Operational rules:
+- Effective materializer fills holes only and MUST NOT overwrite parsed RAW values.
+- If reconstructor fails, first verify materialization/enrichment were executed and RAW still contains required fields (for example numbering mappings).

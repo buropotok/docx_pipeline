@@ -597,8 +597,7 @@ class UltimateReconstructorV10:
             abs_id = rec.get("abstractNumId")
             levels = rec.get("levels", {}) or {}
             if abs_id is None:
-                # If missing, fabricate deterministic abstractNumId = numId
-                abs_id = str(numId)
+                raise ValueError(f"Contract violation: missing abstractNumId for numId={numId} in numbering. Run effective materializer or preserve numbering mappings.")
             if abs_id not in abstract_map:
                 abstract_map[abs_id] = {"levels": levels}
             else:
@@ -656,7 +655,7 @@ class UltimateReconstructorV10:
 
             abs_id = rec.get("abstractNumId")
             if abs_id is None:
-                abs_id = str(numId)
+                raise ValueError(f"Contract violation: missing abstractNumId for numId={numId} in numbering. Run effective materializer or preserve numbering mappings.")
 
             abs_ref = _w_sub(num_el, "abstractNumId")
             _set_w_attr(abs_ref, "val", str(abs_id))

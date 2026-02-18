@@ -22,7 +22,29 @@ Reconstruction Contract v0.2
 - If a value is absent in OOXML, it MUST NOT appear in RAW as a synthesized default.
   (Future normalization/reconstruction policies may be introduced as opt-in modes.)
 
-1.3 Scope (v0.2)
+1.3 Pipeline Requirements
+RULE-PIPE-001 — Materialization prerequisite
+- Official deterministic pipeline for target documents is:
+  0) Word SaveAs materialization: donor.docx -> donor.materialized.docx
+  1) XML parsing: donor.materialized.docx -> donor.json
+  2) Effective materializer enrichment: donor.materialized.docx + donor.json -> donor.effective.json
+  3) Reconstruction: donor.effective.json -> reconstructed.docx
+- Visual 1:1 guarantee for target documents applies to reconstruction input donor.effective.json.
+- SaveAs + enrichment are required in the official pipeline for cases where source OOXML omits effective Word defaults.
+
+RULE-E-001 — Enrichment semantics (fill holes only)
+- Enrichment MAY add only missing values in RAW.
+- Enrichment MUST NOT overwrite values already parsed into RAW.
+
+RULE-E-002 — Enrichment proof requirement
+- Enrichment MUST write only values deterministically extracted from the effective Word model.
+- Enrichment MUST NOT introduce heuristic or guessed values.
+
+RULE-R-VAL-001 — Reconstructor validation/fail-fast
+- If required reconstruction value is missing, reconstructor MUST fail with a contract violation error.
+- Reconstructor MUST NOT synthesize fallback values for missing required data.
+
+1.4 Scope (v0.2)
 Included:
 - Paragraphs (<w:p>) with runs (<w:r>) and tokens <w:t>, <w:tab/>, <w:br/>, <w:cr/>, <w:sym/>
 - Basic paragraph formatting: alignment, indents, spacing, tabs, numbering refs
@@ -154,13 +176,12 @@ UltimateReconstructorV10 does not apply p_override in this version.
 Therefore, for deterministic reconstruction with V10, producers SHOULD omit p_override or keep it empty.
 
 RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v41 + Reconstructor v10)
-End-to-end parsed and reconstructed run types:
+Parsed + reconstructed (end-to-end):
 - text, tab, break, cr, sym
-Parsed but not reconstructed:
-- none in current supported set
-Schema-allowed but not reconstructed:
+Parsed only (not reconstructed):
 - softHyphen, noBreakHyphen
-Unsupported/non-target run content remains outside current deterministic scope.
+Unsupported in current scope:
+- run token content outside schema-defined run.type set
 
 RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V10
 Run types allowed by schema but ignored by UltimateReconstructorV10:
