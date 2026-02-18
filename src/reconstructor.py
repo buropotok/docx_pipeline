@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import zipfile
@@ -804,12 +805,13 @@ class UltimateReconstructorV10:
 
 if __name__ == "__main__":
     try:
-        input_json_name = "donor_v2.6.json"
-        input_json = os.path.join(BASE_DIR, input_json_name)
-        output_docx = os.path.join(BASE_DIR, os.path.splitext(input_json_name)[0] + "_reconstructed.docx")
+        cli = argparse.ArgumentParser(description="UltimateReconstructorV10 RAW JSON -> DOCX")
+        cli.add_argument("--in-json", dest="input_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
+        cli.add_argument("--out-docx", dest="output_docx", default=os.path.join(BASE_DIR, "donor_v2.6_reconstructed.docx"))
+        args = cli.parse_args()
 
-        recon = UltimateReconstructorV10(input_json)
-        recon.build_docx(output_docx)
+        recon = UltimateReconstructorV10(args.input_json)
+        recon.build_docx(args.output_docx)
         print("Реконструкция v4.1_plus завершена успешно!")
     except Exception:
         import traceback

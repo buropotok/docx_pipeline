@@ -143,3 +143,21 @@ Implementation must catch up — schema must not be reduced.
 
 ```bash
 python src/reconstructor.py
+
+---
+
+## Windows pipeline (Word materialize -> parse -> enrich -> reconstruct)
+
+Requirements:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run:
+
+```bash
+python tools/run_pipeline.py donor.docx
+```
+
+Note: Windows only, with installed Microsoft Word.

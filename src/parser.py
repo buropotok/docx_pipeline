@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import zipfile
@@ -905,17 +906,16 @@ class UltimateParserV41:
 
 if __name__ == "__main__":
     try:
-        input_name = "donor_v2.6.docx"
-        input_docx = os.path.join(BASE_DIR, input_name)
+        cli = argparse.ArgumentParser(description="UltimateParserV41 DOCX -> RAW JSON")
+        cli.add_argument("--in", dest="input_docx", default=os.path.join(BASE_DIR, "donor_v2.6.docx"))
+        cli.add_argument("--out", dest="out_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
+        args = cli.parse_args()
 
-        parser = UltimateParserV41(input_docx)
+        parser = UltimateParserV41(args.input_docx)
 
-        out_json = os.path.join(BASE_DIR, os.path.splitext(input_name)[0] + ".json")
-        with open(out_json, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(args.out_json) or ".", exist_ok=True)
+        with open(args.out_json, "w", encoding="utf-8") as f:
             f.write(parser.process())
-
-        raw_donor_dir = os.path.join(os.path.dirname(out_json), "raw", "donor")
-        parser.dump_donor_xml_parts(raw_donor_dir)
 
         print("Парсинг v4.1+ (lxml) завершен успешно!")
     except Exception:
