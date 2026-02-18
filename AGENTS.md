@@ -31,7 +31,7 @@ No visual optimization is allowed.
 
 Pipeline:
 
-    DOCX → Parser → RAW JSON → Reconstructor → DOCX
+    DOCX → Word SaveAs (materialize) → Parser → Effective Materializer → RAW JSON → Reconstructor → DOCX
 
 Key components:
 
@@ -142,9 +142,11 @@ Do NOT implement unless version is bumped:
 - Advanced style inheritance
 
 Run types allowed by schema but NOT reconstructed:
-- cr
 - softHyphen
 - noBreakHyphen
+
+Run type supported end-to-end (parse + reconstruct):
+- cr
 
 If implementing them:
 - bump Schema + Rules version
@@ -226,3 +228,16 @@ No breaking changes without explicit version bump.
 ---
 
 END OF AGENTS MANIFEST
+
+
+## 13. Operational Notes
+
+Official pipeline artifacts are stored in the working directory for each donor:
+- donor.materialized.docx
+- donor.json
+- donor.effective.json
+- donor.reconstructed.docx
+
+Operational rules:
+- Effective materializer fills holes only and MUST NOT overwrite parsed RAW values.
+- If reconstructor fails, first verify materialization/enrichment were executed and RAW still contains required fields (for example numbering mappings).

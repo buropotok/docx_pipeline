@@ -1,5 +1,5 @@
 Reconstruction Contract v0.2
-(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.0)
+(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.2)
 
 0. Versioning
 - RAW JSON MUST declare:
@@ -7,7 +7,9 @@ Reconstruction Contract v0.2
   meta.rules_version
 - This contract corresponds to:
   rules_version = "0.2"
-  schema_version = "2.8.0"
+  schema_version = "2.8.2"
+  parser_version = "v41"
+  reconstructor_version = "v10"
 
 1. General Principles
 1.1 Goal
@@ -20,9 +22,31 @@ Reconstruction Contract v0.2
 - If a value is absent in OOXML, it MUST NOT appear in RAW as a synthesized default.
   (Future normalization/reconstruction policies may be introduced as opt-in modes.)
 
-1.3 Scope (v0.2)
+1.3 Pipeline Requirements
+RULE-PIPE-001 — Materialization prerequisite
+- Official deterministic pipeline for target documents is:
+  0) Word SaveAs materialization: donor.docx -> donor.materialized.docx
+  1) XML parsing: donor.materialized.docx -> donor.json
+  2) Effective materializer enrichment: donor.materialized.docx + donor.json -> donor.effective.json
+  3) Reconstruction: donor.effective.json -> reconstructed.docx
+- Visual 1:1 guarantee for target documents applies to reconstruction input donor.effective.json.
+- SaveAs + enrichment are required in the official pipeline for cases where source OOXML omits effective Word defaults.
+
+RULE-E-001 — Enrichment semantics (fill holes only)
+- Enrichment MAY add only missing values in RAW.
+- Enrichment MUST NOT overwrite values already parsed into RAW.
+
+RULE-E-002 — Enrichment proof requirement
+- Enrichment MUST write only values deterministically extracted from the effective Word model.
+- Enrichment MUST NOT introduce heuristic or guessed values.
+
+RULE-R-VAL-001 — Reconstructor validation/fail-fast
+- If required reconstruction value is missing, reconstructor MUST fail with a contract violation error.
+- Reconstructor MUST NOT synthesize fallback values for missing required data.
+
+1.4 Scope (v0.2)
 Included:
-- Paragraphs (<w:p>) with runs (<w:r>) and tokens <w:t>, <w:tab/>, <w:br/>, <w:sym/>
+- Paragraphs (<w:p>) with runs (<w:r>) and tokens <w:t>, <w:tab/>, <w:br/>, <w:cr/>, <w:sym/>
 - Basic paragraph formatting: alignment, indents, spacing, tabs, numbering refs
 - Basic run formatting: fonts, size, bold/italic/underline/caps/color/vertAlign/lang/charSpacing/position
 - Single-section page setup (sectPr: pgSz/pgMar/cols)
@@ -32,7 +56,7 @@ Excluded / not guaranteed for deterministic behavior in this version:
 - Tables, drawings/images/shapes, fields, hyperlinks, headers/footers, footnotes/endnotes
 - Complex section breaks beyond one terminal sectPr
 - Advanced style inheritance beyond what the parser explicitly resolves into RAW
-- Run token types: cr, softHyphen, noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV10 (see RULE-RUN-UNSUPPORTED)
+- Run token types softHyphen and noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV10 (see RULE-RUN-COMPATIBILITY and RULE-RUN-UNSUPPORTED)
 
 2. Parsing Rules (DOCX → RAW)
 
@@ -47,7 +71,7 @@ RULE-P-002 — Token Order Integrity
 During parsing:
 - <w:r> elements MUST NOT be merged.
 - Token order MUST be preserved exactly for:
-  <w:t>, <w:tab/>, <w:br/>, <w:sym/>
+  <w:t>, <w:tab/>, <w:br/>, <w:cr/>, <w:sym/>
 - Non-run or non-token elements MAY be ignored but MUST NOT affect token order.
 
 RULE-P-003 — Whitespace Preservation (RAW text)
@@ -82,6 +106,12 @@ Supported spacing fields in RAW p_format:
   beforeAutospacing, afterAutospacing,
   lineTwip, lineRule
 If a field is not present in OOXML, it MUST NOT be synthesized into RAW.
+
+RULE-P-007 — Default Base Style Mapping
+Parser MUST set `meta.default_style_id` to the internal RAW style_id that corresponds to Word default paragraph style (`w:style` with `w:type="paragraph"` and `w:default="1"/"true"`).
+The mapping MUST be based on effective formatting (docDefaults + style chain + that style's own pPr/rPr), then registered through the RAW styles library.
+This field does not bind content style_id values to Word `styleId`; it only selects the RAW base style used for generating Word Normal style.
+
 
 3. Reconstruction Rules (RAW → DOCX)
 
@@ -130,6 +160,7 @@ Supported run types in UltimateReconstructorV10:
 - text  -> <w:t>
 - tab   -> <w:tab/>
 - break -> <w:br/> and optional @w:type from run.break_type if provided and valid
+- cr    -> <w:cr/>
 - sym   -> emitted as <w:t> with literal text (best-effort in this version)
 Token order MUST match RAW order exactly.
 
@@ -144,9 +175,17 @@ content[].p_override is reserved by schema.
 UltimateReconstructorV10 does not apply p_override in this version.
 Therefore, for deterministic reconstruction with V10, producers SHOULD omit p_override or keep it empty.
 
+RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v41 + Reconstructor v10)
+Parsed + reconstructed (end-to-end):
+- text, tab, break, cr, sym
+Parsed only (not reconstructed):
+- softHyphen, noBreakHyphen
+Unsupported in current scope:
+- run token content outside schema-defined run.type set
+
 RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V10
 Run types allowed by schema but ignored by UltimateReconstructorV10:
-- cr, softHyphen, noBreakHyphen
+- softHyphen, noBreakHyphen
 If present, they do not contribute to reconstructed XML in this version.
 For strict 1:1 determinism with V10, producers MUST NOT emit these run types.
 
@@ -154,7 +193,9 @@ RULE-R-009 — Package Parts
 Reconstructor MUST write:
 - word/document.xml
 - word/styles.xml (minimal Normal + docDefaults run properties)
-- word/settings.xml (defaultTabStop if present)
+  - Reconstructor MUST use meta.default_style_id (if present and valid) to build default paragraph style Normal with pPr from styles[default_style_id].p_format and may include rPr from styles[default_style_id].r_format.
+  - If meta.default_style_id is missing or invalid, current minimal fallback behavior is used.
+- word/settings.xml (minimal settings.xml with defaultTabStop if present)
 - word/numbering.xml only if numbering_definitions non-empty
 And the required relationships and [Content_Types].xml deterministically.
 
