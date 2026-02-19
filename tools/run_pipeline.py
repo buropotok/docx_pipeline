@@ -5,7 +5,8 @@ import subprocess
 import sys
 
 
-WORK_DIR = Path("/data")
+WORK_DIR = Path(__file__).resolve().parent.parent / "data"
+
 
 
 def run_cmd(cmd):
