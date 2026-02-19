@@ -4,7 +4,7 @@ Deterministic DOCX ↔ RAW JSON pipeline for "forms" subset documents.
 
 Current Versions:
 
-- Schema: 2.8.0
+- Schema: 2.8.1
 - Rules: 0.2
 - Reconstructor: UltimateReconstructorV10
 - Parser: (see src/parser.py version header)
@@ -143,3 +143,46 @@ Implementation must catch up — schema must not be reduced.
 
 ```bash
 python src/reconstructor.py
+
+---
+
+## Windows pipeline (Word materialize -> parse -> enrich -> reconstruct)
+
+Requirements:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run:
+
+```bash
+python tools/run_pipeline.py donor.docx  # reads /data/donor.docx by default
+```
+
+Note: Windows only, with installed Microsoft Word.
+
+By default pipeline artifacts are written into `/data`:
+- `/data/<name>.materialized.docx`
+- `/data/<name>.json`
+- `/data/<name>.effective.json`
+- `/data/<name>.reconstructed.docx`
+
+Raw ZIP contents are also extracted automatically for analysis:
+- `/data/raw/donor`
+- `/data/raw/materialized`
+- `/data/raw/reconstructed`
+
+
+
+## Official deterministic pipeline (Windows target flow)
+
+0) Word SaveAs materialization: `donor.docx -> donor.materialized.docx`  
+1) XML Parser: `donor.materialized.docx -> donor.json`  
+2) Effective materializer (Word COM enrichment): `donor.materialized.docx + donor.json -> donor.effective.json`  
+   - fill holes only, no overwrite of already parsed values  
+3) Reconstructor: `donor.effective.json -> donor.reconstructed.docx`
+
+For target documents, visual 1:1 geometry guarantee applies to reconstructor input `donor.effective.json`.
+SaveAs and enrichment are mandatory parts of the official pipeline for cases where source OOXML does not serialize effective Word defaults completely.
+
