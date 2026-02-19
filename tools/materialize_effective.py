@@ -110,22 +110,27 @@ def main() -> int:
         doc = app.Documents.Open(docx_path, ReadOnly=True)
 
         style = None
-        resolve_reasons = []
         try:
             style = doc.Styles("Normal")
-            print("[effective] resolve_normal: method=name value=Normal status=ok")
-        except Exception as exc_name:
-            resolve_reasons.append(f"name_lookup_failed: {exc_name}")
+            print('[materialize_effective] resolve_normal: method=name("Normal") ok')
+        except Exception as e1:
+            print(f'[materialize_effective] resolve_normal: method=name("Normal") failed: {e1!r}')
+            wd_style_normal = -1
+            source = "fallback:-1"
             try:
                 wd_style_normal = getattr(win32com.client.constants, "wdStyleNormal")
+                source = "constants.wdStyleNormal"
+            except Exception as e_const:
+                print(f'[materialize_effective] resolve_normal: constants.wdStyleNormal unavailable: {e_const!r}; using -1')
+
+            try:
                 style = doc.Styles(wd_style_normal)
-                print(f"[effective] resolve_normal: method=constant value={wd_style_normal} status=ok")
-            except Exception as exc_const:
-                resolve_reasons.append(f"constant_lookup_failed: {exc_const}")
+                print(f'[materialize_effective] resolve_normal: method={source}({wd_style_normal}) ok')
+            except Exception as e2:
+                print(f'[materialize_effective] resolve_normal: method=wdStyleNormal({wd_style_normal}) failed: {e2!r}')
                 style = None
 
         if style is None:
-            print(f"[effective] resolve_normal: status=failed reasons={resolve_reasons}")
             print("[effective] warning: cannot resolve Normal style, writing copy")
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)

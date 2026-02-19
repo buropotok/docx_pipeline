@@ -632,6 +632,16 @@ class UltimateReconstructorV10:
                 template = lvl_rec.get("template")
                 if not isinstance(template, str):
                     continue
+<<<<<<< codex/analyze-docx_pipeline-repository-rfay35
+
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
+=======
+>>>>>>> main
 
                 lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                 if "start" in lvl_rec:
