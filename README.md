@@ -157,10 +157,21 @@ pip install -r requirements.txt
 Run:
 
 ```bash
-python tools/run_pipeline.py donor.docx
+python tools/run_pipeline.py donor.docx  # reads /data/donor.docx by default
 ```
 
 Note: Windows only, with installed Microsoft Word.
+
+By default pipeline artifacts are written into `/data`:
+- `/data/<name>.materialized.docx`
+- `/data/<name>.json`
+- `/data/<name>.effective.json`
+- `/data/<name>.reconstructed.docx`
+
+Raw ZIP contents are also extracted automatically for analysis:
+- `/data/raw/donor`
+- `/data/raw/materialized`
+- `/data/raw/reconstructed`
 
 
 

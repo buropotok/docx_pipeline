@@ -113,9 +113,8 @@ def main() -> int:
             style = doc.Styles("Normal")
         except Exception:
             try:
-                wd_style_normal = getattr(win32com.client.constants, "wdStyleNormal", -1)
-                if wd_style_normal != -1:
-                    style = doc.Styles(wd_style_normal)
+                wd_style_normal = getattr(win32com.client.constants, "wdStyleNormal")
+                style = doc.Styles(wd_style_normal)
             except Exception:
                 style = None
 
