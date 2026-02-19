@@ -5,10 +5,10 @@ import time
 import zipfile
 from pathlib import Path
 
-from tools.logging_utils import setup_run_logger
+from .logging_utils import setup_run_logger
 
 
-WORK_DIR = Path("/data")
+WORK_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 def parse_versions_from_version_md() -> dict:
