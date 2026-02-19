@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import traceback
 from typing import Any, Dict, Optional
 
 
@@ -86,7 +87,7 @@ def main() -> int:
     default_style_id = meta.get("default_style_id")
 
     if not isinstance(default_style_id, str) or default_style_id not in styles:
-        print("[materialize_effective] warning: meta.default_style_id missing/invalid, writing copy")
+        print("[effective] warning: meta.default_style_id missing/invalid, writing copy")
         with open(out_json, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return 0
@@ -94,7 +95,7 @@ def main() -> int:
     try:
         import win32com.client  # type: ignore
     except Exception as exc:
-        print(f"[materialize_effective] pywin32 import failed: {exc}")
+        print(f"[effective] pywin32 import failed: {exc}")
         return 2
 
     app = None
@@ -102,27 +103,38 @@ def main() -> int:
     extracted: Dict[str, Any] = {}
 
     try:
-        print(f"[materialize_effective] opening docx: {docx_path}")
+        print(f"[effective] opening docx: {docx_path}")
         app = win32com.client.DispatchEx("Word.Application")
         app.Visible = False
         app.DisplayAlerts = 0
         doc = app.Documents.Open(docx_path, ReadOnly=True)
 
         style = None
+        resolve_reasons = []
         try:
             style = doc.Styles("Normal")
-        except Exception:
+            print("[effective] resolve_normal: method=name value=Normal status=ok")
+        except Exception as exc_name:
+            resolve_reasons.append(f"name_lookup_failed: {exc_name}")
             try:
                 wd_style_normal = getattr(win32com.client.constants, "wdStyleNormal")
                 style = doc.Styles(wd_style_normal)
-            except Exception:
+                print(f"[effective] resolve_normal: method=constant value={wd_style_normal} status=ok")
+            except Exception as exc_const:
+                resolve_reasons.append(f"constant_lookup_failed: {exc_const}")
                 style = None
 
         if style is None:
-            print("[materialize_effective] warning: cannot resolve Normal style, writing copy")
+            print(f"[effective] resolve_normal: status=failed reasons={resolve_reasons}")
+            print("[effective] warning: cannot resolve Normal style, writing copy")
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return 0
+
+        try:
+            print(f"[effective] resolve_normal: style_name={style.Name} style_name_local={style.NameLocal}")
+        except Exception:
+            print("[effective] resolve_normal: style_name unavailable")
 
         pf = style.ParagraphFormat
 
@@ -131,61 +143,74 @@ def main() -> int:
             tw = _points_to_twips(sb)
             if tw is not None:
                 extracted["spaceBeforeTwip"] = tw
-            print(f"[materialize_effective] SpaceBefore={sb}pt -> {tw}")
+            print(f"[effective] SpaceBefore={sb}pt -> {tw}")
         except Exception as exc:
-            print(f"[materialize_effective] SpaceBefore unavailable: {exc}")
+            print(f"[effective] SpaceBefore unavailable: {exc}")
 
         try:
             sa = pf.SpaceAfter
             tw = _points_to_twips(sa)
             if tw is not None:
                 extracted["spaceAfterTwip"] = tw
-            print(f"[materialize_effective] SpaceAfter={sa}pt -> {tw}")
+            print(f"[effective] SpaceAfter={sa}pt -> {tw}")
         except Exception as exc:
-            print(f"[materialize_effective] SpaceAfter unavailable: {exc}")
+            print(f"[effective] SpaceAfter unavailable: {exc}")
 
         line_rule = None
         line_spacing = None
         try:
             line_rule = pf.LineSpacingRule
-            print(f"[materialize_effective] LineSpacingRule={line_rule}")
+            print(f"[effective] LineSpacingRule={line_rule}")
         except Exception as exc:
-            print(f"[materialize_effective] LineSpacingRule unavailable: {exc}")
+            print(f"[effective] LineSpacingRule unavailable: {exc}")
 
         try:
             line_spacing = pf.LineSpacing
-            print(f"[materialize_effective] LineSpacing={line_spacing}")
+            print(f"[effective] LineSpacing={line_spacing}")
         except Exception as exc:
-            print(f"[materialize_effective] LineSpacing unavailable: {exc}")
+            print(f"[effective] LineSpacing unavailable: {exc}")
 
         line_vals = _extract_line_info(line_rule, line_spacing)
         if line_vals:
             extracted.update(line_vals)
-            print(f"[materialize_effective] line fields extracted: {line_vals}")
+            print(f"[effective] line fields extracted: {line_vals}")
         else:
-            print("[materialize_effective] line fields not extracted")
+            print("[effective] line fields not extracted")
+    except Exception as exc:
+        print(f"[effective] ERROR type={type(exc).__name__} message={exc}")
+        print(traceback.format_exc())
+        return 1
     finally:
         if doc is not None:
             try:
-                print("[materialize_effective] closing doc")
+                print("[effective] closing doc")
                 doc.Close(False)
             except Exception as exc:
-                print(f"[materialize_effective] close warning: {exc}")
+                print(f"[effective] close warning: {exc}")
         if app is not None:
             try:
-                print("[materialize_effective] quitting Word")
+                print("[effective] quitting Word")
                 app.Quit()
             except Exception as exc:
-                print(f"[materialize_effective] quit warning: {exc}")
+                print(f"[effective] quit warning: {exc}")
 
     p_format = styles[default_style_id].setdefault("p_format", {})
-    filled = []
-    for key in ("spaceBeforeTwip", "spaceAfterTwip", "lineTwip", "lineRule"):
+    target_fields = ["spaceBeforeTwip", "spaceAfterTwip", "lineTwip", "lineRule"]
+    missing_before = sorted([k for k in target_fields if k not in p_format])
+    skipped_existing = sorted([k for k in target_fields if k in p_format])
+    filled_fields = []
+
+    print(f"[effective] target_style_id={default_style_id}")
+    print(f"[effective] missing_fields_before={missing_before}")
+
+    for key in sorted(target_fields):
         if key in extracted and key not in p_format:
             p_format[key] = extracted[key]
-            filled.append(key)
+            filled_fields.append(f"{key}: old=None -> new={extracted[key]}")
 
-    print(f"[materialize_effective] filled fields: {filled}")
+    print(f"[effective] filled_fields={filled_fields}")
+    print(f"[effective] skipped_existing_fields={skipped_existing}")
+    print(f"[effective] enriched={'yes' if filled_fields else 'no'} filled_count={len(filled_fields)} skipped_count={len(skipped_existing)}")
 
     os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
     with open(out_json, "w", encoding="utf-8") as f:

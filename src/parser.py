@@ -232,6 +232,8 @@ class UltimateParserV41:
 
         body = self.document_xml.find(qn("w:body"))
         default_word_style_id = self._get_default_word_paragraph_style_id()
+        paragraphs_count = 0
+        runs_count = 0
 
         if body is None:
             if default_word_style_id is not None:
@@ -240,9 +242,11 @@ class UltimateParserV41:
                 default_style_id = self._register_out_style(default_p_format, default_r_format)
                 result["meta"]["default_style_id"] = default_style_id
             result["styles"] = self.out_styles
+            print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
             return json.dumps(result, ensure_ascii=False, indent=2)
 
         for p in body.findall(qn("w:p")):
+            paragraphs_count += 1
             pPr = p.find(qn("w:pPr"))
             p_style_id = self._get_p_style_id(pPr)
 
@@ -256,6 +260,7 @@ class UltimateParserV41:
             para_mark_rPr = self._parse_rPr(pPr.find(qn("w:rPr")) if pPr is not None else None)
 
             runs = self._parse_runs(p, base_r_for_diff=style_r_format)
+            runs_count += len(runs)
 
             # RULE-006:
             if runs:
@@ -277,6 +282,7 @@ class UltimateParserV41:
             result["meta"]["default_style_id"] = default_style_id
 
         result["styles"] = self.out_styles
+        print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     # =========================

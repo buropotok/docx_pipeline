@@ -173,6 +173,9 @@ Raw ZIP contents are also extracted automatically for analysis:
 - `/data/raw/materialized`
 - `/data/raw/reconstructed`
 
+Each run writes a diagnostic log:
+- `/data/logs/run_YYYYMMDD_HHMMSS.log`
+
 
 
 ## Official deterministic pipeline (Windows target flow)

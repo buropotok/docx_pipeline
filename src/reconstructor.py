@@ -123,6 +123,19 @@ class UltimateReconstructorV10:
         if isinstance(default_style_id, str) and default_style_id in self.styles:
             self.default_style_id = default_style_id
 
+        unsupported_run_types = []
+        for p_item in self.content:
+            for run in (p_item.get("runs") or []):
+                rtype = run.get("type")
+                if rtype in ("softHyphen", "noBreakHyphen"):
+                    unsupported_run_types.append(rtype)
+
+        print(
+            f"[recon] summary input_schema={self.meta.get('schema_version')} input_rules={self.meta.get('rules_version')} "
+            f"default_style_id={self.default_style_id} paragraphs_count={len(self.content)} "
+            f"unsupported_runs_count={len(unsupported_run_types)}"
+        )
+
     # =========================
     # PUBLIC
     # =========================

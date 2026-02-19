@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import traceback
 
 
 def main() -> int:
@@ -12,13 +13,13 @@ def main() -> int:
     in_docx = os.path.abspath(args.in_docx)
     out_docx = os.path.abspath(args.out_docx)
 
-    print(f"[word_saveas] input: {in_docx}")
-    print(f"[word_saveas] output: {out_docx}")
+    print(f"[saveas] input: {in_docx}")
+    print(f"[saveas] output: {out_docx}")
 
     try:
         import win32com.client  # type: ignore
     except Exception as exc:
-        print(f"[word_saveas] pywin32 import failed: {exc}")
+        print(f"[saveas] pywin32 import failed: {exc}")
         return 2
 
     os.makedirs(os.path.dirname(out_docx) or ".", exist_ok=True)
@@ -26,36 +27,46 @@ def main() -> int:
     app = None
     doc = None
     try:
-        print("[word_saveas] starting Word.Application")
+        print("[saveas] starting Word.Application")
         app = win32com.client.DispatchEx("Word.Application")
         app.Visible = False
         app.DisplayAlerts = 0
+        try:
+            print(f"[saveas] word_version={app.Version}")
+        except Exception:
+            print("[saveas] word_version=unavailable")
+        print(f"[saveas] visible={app.Visible} display_alerts={app.DisplayAlerts}")
 
-        print("[word_saveas] opening document (ReadOnly=True)")
+        print(f"[saveas] opening document path={in_docx} ReadOnly=True")
         doc = app.Documents.Open(in_docx, ReadOnly=True)
 
-        print("[word_saveas] saving as DOCX (FileFormat=16)")
+        print(f"[saveas] saveas path={out_docx} file_format=16")
         doc.SaveAs2(out_docx, FileFormat=16)
 
         if not os.path.exists(out_docx):
-            print("[word_saveas] SaveAs2 finished but output file not found")
+            print("[saveas] SaveAs2 finished but output file not found")
             return 3
 
-        print("[word_saveas] done")
+        print("[saveas] done")
         return 0
+    except Exception as exc:
+        hresult = getattr(exc, "hresult", None)
+        print(f"[saveas] ERROR type={type(exc).__name__} hresult={hresult} message={exc}")
+        print(traceback.format_exc())
+        return 1
     finally:
         if doc is not None:
             try:
-                print("[word_saveas] closing document")
+                print("[saveas] closing document")
                 doc.Close(False)
             except Exception as exc:
-                print(f"[word_saveas] close doc warning: {exc}")
+                print(f"[saveas] close doc warning: {exc}")
         if app is not None:
             try:
-                print("[word_saveas] quitting Word")
+                print("[saveas] quitting Word")
                 app.Quit()
             except Exception as exc:
-                print(f"[word_saveas] quit warning: {exc}")
+                print(f"[saveas] quit warning: {exc}")
 
 
 if __name__ == "__main__":
