@@ -365,7 +365,7 @@ class UltimateParserV41:
                 base = _merge(base, ws.pPr)
 
         # direct pPr overrides
-        base = _merge(base, self._parse_pPr(direct_pPr))
+        base = _merge(base, self._parse_pPr(direct_pPr, include_indent_origin=True))
 
         return base
 
@@ -662,7 +662,7 @@ class UltimateParserV41:
     # PARAGRAPH FORMATTING (pPr -> pFormat)
     # =========================
 
-    def _parse_pPr(self, pPr: Optional[etree._Element]) -> Dict[str, Any]:
+    def _parse_pPr(self, pPr: Optional[etree._Element], include_indent_origin: bool = False) -> Dict[str, Any]:
         """
         Parse paragraph properties (w:pPr) -> p_format (schema).
         Goal: visually-lossless. IMPORTANT: keep explicit zeros (0) if present in XML.
@@ -697,12 +697,20 @@ class UltimateParserV41:
 
             if left is not None:
                 out["indentStartTwip"] = left
+                if include_indent_origin:
+                    out["indentStartTwipOrigin"] = "direct"
             if right is not None:
                 out["indentEndTwip"] = right
+                if include_indent_origin:
+                    out["indentEndTwipOrigin"] = "direct"
             if first is not None:
                 out["indentFirstLineTwip"] = first
+                if include_indent_origin:
+                    out["indentFirstLineTwipOrigin"] = "direct"
             if hanging is not None:
                 out["indentHangingTwip"] = hanging  # RULE-001
+                if include_indent_origin:
+                    out["indentHangingTwipOrigin"] = "direct"
 
         # spacing (w:spacing)  <-- keep explicit zeros
         spacing = pPr.find(qn("w:spacing"))

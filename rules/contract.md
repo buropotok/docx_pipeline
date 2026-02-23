@@ -105,6 +105,20 @@ No synthetic defaults are allowed: if a source element is absent, corresponding 
 In particular, if donor level does not contain w:lvl/w:tab, parser MUST NOT add tabPosTwip.
 These fields are required to preserve list geometry (number/text indentation and number style).
 
+RULE-P-INDENT-ORIGIN — Paragraph Indent Origin Tracking
+When parser writes paragraph p_format indent fields from document.xml direct paragraph properties (<w:p>/<w:pPr>/<w:ind>):
+- indentStartTwipOrigin = "direct" for indentStartTwip
+- indentEndTwipOrigin = "direct" for indentEndTwip
+- indentFirstLineTwipOrigin = "direct" for indentFirstLineTwip
+- indentHangingTwipOrigin = "direct" for indentHangingTwip
+Origin MUST be emitted only when corresponding indent value is present.
+No synthetic origin defaults are allowed.
+
+Reconstructor MUST suppress style-derived paragraph indents for numbered paragraphs:
+- if paragraph has numbering and indent origin is not "direct" (or origin is absent), reconstructor MUST NOT emit corresponding <w:pPr>/<w:ind> attribute for that indent key.
+- if numbered paragraph has at least one indent with origin "direct", only those direct indent attributes MAY be emitted.
+This avoids paragraph-level indent override of numbering-level geometry.
+
 RULE-P-006 — Spacing Preservation (no synthesis)
 If paragraph effective spacing is explicitly defined in OOXML (in paragraph pPr, style pPr, or docDefaults pPr):
 - Parser MUST preserve it in RAW p_format as the corresponding fields.

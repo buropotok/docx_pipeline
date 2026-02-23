@@ -198,7 +198,23 @@ class UltimateReconstructorV10:
             base_r = st.get("r_format", {}) or {}
 
             # paragraph properties
-            pPr = self._build_pPr(p_format)
+            p_format_for_emit = dict(p_format)
+            num_ref = p_format_for_emit.get("numbering")
+            if isinstance(num_ref, dict):
+                indent_pairs = [
+                    ("indentStartTwip", "indentStartTwipOrigin"),
+                    ("indentEndTwip", "indentEndTwipOrigin"),
+                    ("indentFirstLineTwip", "indentFirstLineTwipOrigin"),
+                    ("indentHangingTwip", "indentHangingTwipOrigin"),
+                ]
+                for indent_key, origin_key in indent_pairs:
+                    if origin_key in p_format_for_emit and p_format_for_emit.get(origin_key) != "direct":
+                        p_format_for_emit.pop(indent_key, None)
+                    elif origin_key not in p_format_for_emit:
+                        p_format_for_emit.pop(indent_key, None)
+                    p_format_for_emit.pop(origin_key, None)
+
+            pPr = self._build_pPr(p_format_for_emit)
             if pPr is not None:
                 p.append(pPr)
 
