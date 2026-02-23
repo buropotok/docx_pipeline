@@ -5,7 +5,10 @@ import time
 import zipfile
 from pathlib import Path
 
-from .logging_utils import setup_run_logger
+try:
+    from .logging_utils import setup_run_logger
+except ImportError:
+    from tools.logging_utils import setup_run_logger
 
 
 WORK_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -76,7 +79,7 @@ def file_size_if_exists(path: Path) -> int:
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("Usage: python tools/run_pipeline.py <donor.docx | /data/donor.docx>")
+        print("Usage: python -m tools.run_pipeline <donor.docx | /abs/path/donor.docx>")
         return 2
 
     WORK_DIR.mkdir(parents=True, exist_ok=True)

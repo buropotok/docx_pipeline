@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Standard RAW JSON Schema v2.8.2 (Meta Versioning + Spacing Lines/Autospacing + Relational Styles/Numbering + Tabs + Page Setup + Extended Paragraph/Run Model)",
+  "title": "Standard RAW JSON Schema v2.8.3 (Meta Versioning + Spacing Lines/Autospacing + Relational Styles/Numbering + Tabs + Page Setup + Extended Paragraph/Run Model)",
   "type": "object",
   "required": ["meta", "document_info", "numbering_definitions", "styles", "content"],
   "additionalProperties": false,
@@ -387,6 +387,7 @@
         "required": ["levels"],
         "properties": {
           "abstractNumId": { "type": "string" },
+          "multiLevelType": { "type": "string" },
 
           "levels": {
             "type": "object",
@@ -398,7 +399,25 @@
               "properties": {
                 "format": { "type": "string" },
                 "template": { "type": "string" },
-                "start": { "type": "integer" }
+                "start": { "type": "integer" },
+                "lvlJc": { "type": "string" },
+                "suff": { "type": "string" },
+                "pStyle": { "type": "string" },
+                "level_pPr": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "indentStartTwip": { "type": "integer" },
+                    "indentEndTwip": { "type": "integer" },
+                    "indentFirstLineTwip": { "type": "integer" },
+                    "indentHangingTwip": { "type": "integer" },
+                    "tabs": {
+                      "type": "array",
+                      "items": { "$ref": "#/$defs/tabStop" }
+                    }
+                  }
+                },
+                "level_rPr": { "$ref": "#/$defs/rFormat" }
               }
             }
           },

@@ -5,13 +5,10 @@ TranslateFactory — детерминированная система подг�
 
 Система реализует воспроизводимый pipeline:
 
-DOCX / Scan
-    → Canonical IR
-    → Fingerprints
-    → Knowledge Base alignment
-    → Filled IR
-    → Deterministic Reconstruction
-    → Final DOCX
+- Schema: 2.8.1
+- Rules: 0.2
+- Reconstructor: UltimateReconstructorV11
+- Parser: (see src/parser.py version header)
 
 Система проектируется как аудитопригодная и версионируемая.
 
@@ -101,237 +98,51 @@ raw.cleaned.json
 
 whitespace normalization
 
-удаление технического мусора
+```bash
+python src/reconstructor.py
 
-структурная очистка
+---
 
-Запрещено:
+## Windows pipeline (Word materialize -> parse -> enrich -> reconstruct)
 
-генерация новых semantic значений
+Requirements:
 
-исправление логики документа
+```bash
+pip install -r requirements.txt
+```
 
-4.4 Stage 3 — Organizing (AI)
+Run:
 
-Артефакт:
+```bash
+python -m tools.run_pipeline donor.docx  # reads ./data/donor.docx by default
+```
 
-raw.cleaned.organized.json
+Note: Windows only, with installed Microsoft Word.
 
-Добавляется:
+By default pipeline artifacts are written into `/data`:
+- `/data/<name>.materialized.docx`
+- `/data/<name>.json`
+- `/data/<name>.effective.json`
+- `/data/<name>.reconstructed.docx`
 
-SG (structural groups)
+Raw ZIP contents are also extracted automatically for analysis:
+- `/data/raw/donor`
+- `/data/raw/materialized`
+- `/data/raw/reconstructed`
 
-семантические блоки
+Each run writes a diagnostic log:
+- `/data/logs/run_YYYYMMDD_HHMMSS.log`
 
-логическая структура
 
-4.5 Stage 4 — Docx Fingerprint
 
-Артефакт:
+## Official deterministic pipeline (Windows target flow)
 
-docx_fingerprint.json
+0) Word SaveAs materialization: `donor.docx -> donor.materialized.docx`  
+1) XML Parser: `donor.materialized.docx -> donor.json`  
+2) Effective materializer (Word COM enrichment): `donor.materialized.docx + donor.json -> donor.effective.json`  
+   - fill holes only, no overwrite of already parsed values  
+3) Reconstructor: `donor.effective.json -> donor.reconstructed.docx`
 
-Содержит:
+For target documents, visual 1:1 geometry guarantee applies to reconstructor input `donor.effective.json`.
+SaveAs and enrichment are mandatory parts of the official pipeline for cases where source OOXML does not serialize effective Word defaults completely.
 
-структурные сигнатуры
-
-признаки шаблонности
-
-repeat patterns
-
-Используется для:
-
-KB matching
-
-clustering
-
-winner selection
-
-4.6 Stage 5 — Filled Stage
-
-Артефакты:
-
-raw.cleaned.organized.filled.json
-docx_fingerprint.filled.json
-
-Инварианты:
-
-fill holes only
-
-no overwrite
-
-no synthetic
-
-no normalization outside contract
-
-После этого выполняется нормализация обратно в:
-
-raw.cleaned.organized.json
-docx_fingerprint.json
-4.7 Stage 6 — Reconstruction
-
-Asset:
-
-reconstruct_docx
-
-Вход:
-
-organized.json
-
-docx_fingerprint.json
-
-Выход:
-
-reconstructed.docx
-
-Гарантии:
-
-Строго детерминированный
-
-Fail-fast
-
-Не исправляет вход
-
-Не генерирует missing
-
-5. Orchestration (Dagster)
-
-Pipeline реализован через Dagster assets.
-
-Основные assets
-saveas_materialized
-parse_raw_json
-materialize_effective
-reconstruct_docx
-
-Full job:
-
-full_run_job
-
-Используется:
-
-Nothing
-
-non_argument_deps
-
-file-based run_dir
-
-6. Run Model
-
-Каждый запуск создаёт:
-
-data/runs/<run_id>/
-
-Типовая структура:
-
-input.docx
-materialized.docx
-unpacked_docx/
-raw.json
-raw.cleaned.json
-raw.cleaned.organized.json
-docx_fingerprint.json
-raw.cleaned.organized.filled.json
-docx_fingerprint.filled.json
-reconstructed.docx
-logs/
-
-Все артефакты сохраняются.
-
-Pipeline допускает перезапуск с любого промежуточного этапа.
-
-7. How to Run
-7.1 Запуск через Dagster
-
-Пример:
-
-dagster job execute -f tf_dagster/assets.py -j full_run_job
-
-(или через dagster dev UI)
-
-Параметризация input осуществляется через конфигурацию job / env.
-
-7.2 Ручной запуск parser
-python src/parser.py input.docx output_raw.json
-
-(если предусмотрен CLI)
-
-7.3 Ручной запуск reconstructor
-python src/reconstructor.py organized.json fingerprint.json output.docx
-8. Determinism Guarantees
-
-Система обеспечивает:
-
-Полную воспроизводимость
-
-Отсутствие скрытых мутаций
-
-Явные промежуточные состояния
-
-Отсутствие implicit state
-
-Версионирование схем
-
-Любой run можно:
-
-повторить
-
-сравнить
-
-диффировать
-
-аудитировать
-
-9. AI Boundary
-
-AI используется только в:
-
-cleaning
-
-organizing
-
-winner selection
-
-filling
-
-edits
-
-AI никогда не используется в:
-
-parsing
-
-reconstruction
-
-fingerprint, если запрещено контрактом
-
-10. Engineering Constraints
-
-Запрещено:
-
-синтетика вне разрешённого
-
-автоматическое исправление missing
-
-silent fallback
-
-implicit defaults
-
-merging runs
-
-Все изменения схем — только эволюционные.
-
-11. Roadmap (Engineering)
-
-Parameterized input
-
-Batch KB bootstrap
-
-COM concurrency limits
-
-Quarantine mechanism
-
-Retry policy
-
-Full online pipeline
-
-Production notarization mode

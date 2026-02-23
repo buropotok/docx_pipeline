@@ -1,7 +1,7 @@
-# UltimateParserV41.py
+# UltimateParserV42.py
 # DOCX -> RAW JSON (schema v2.7.x / v2.8-ish) using lxml (NO python-docx)
-# Parser Version: v41
-# Schema Version: 2.8.2
+# Parser Version: v42
+# Schema Version: 2.8.3
 # Rules Version: 0.2
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -214,11 +214,11 @@ class UltimateParserV41:
             settings["defaultTabStopTwip"] = default_tab_stop
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.8.2",
+                "schema_version": "2.8.3",
                 "rules_version": "0.2",
                 "producer": {
-                    "name": "UltimateParserV41",
-                    "version": "v41"
+                    "name": "UltimateParserV42",
+                    "version": "v42"
                 }
             },
             "document_info": {
@@ -502,6 +502,46 @@ class UltimateParserV41:
     # NUMBERING (no synthetic defaults)
     # =========================
 
+    def _parse_numbering_level_pPr(self, lvl: etree._Element) -> Dict[str, Any]:
+        ppr = lvl.find(qn("w:pPr"))
+        if ppr is None:
+            return {}
+
+        out: Dict[str, Any] = {}
+
+        ind = ppr.find(qn("w:ind"))
+        if ind is not None:
+            left = _int_attr(ind, "left")
+            right = _int_attr(ind, "right")
+            first = _int_attr(ind, "firstLine")
+            hanging = _int_attr(ind, "hanging")
+            if left is not None:
+                out["indentStartTwip"] = left
+            if right is not None:
+                out["indentEndTwip"] = right
+            if first is not None:
+                out["indentFirstLineTwip"] = first
+            if hanging is not None:
+                out["indentHangingTwip"] = hanging
+
+        tabs = ppr.find(qn("w:tabs"))
+        if tabs is not None:
+            arr: List[Dict[str, Any]] = []
+            for t in tabs.findall(qn("w:tab")):
+                pos = _int_attr(t, "pos")
+                val = _str_attr(t, "val")
+                leader = _str_attr(t, "leader")
+                if pos is None or val is None:
+                    continue
+                rec: Dict[str, Any] = {"posTwip": pos, "val": val}
+                if leader is not None:
+                    rec["leader"] = leader
+                arr.append(rec)
+            if arr:
+                out["tabs"] = arr
+
+        return out
+
     def _parse_numbering_definitions(self) -> Dict[str, Any]:
         if self.numbering_xml is None:
             return {}
@@ -537,9 +577,42 @@ class UltimateParserV41:
                 }
                 if st is not None:
                     level_rec["start"] = st
+
+                lvl_jc_el = lvl.find(qn("w:lvlJc"))
+                if lvl_jc_el is not None:
+                    lvl_jc = _str_attr(lvl_jc_el, "val")
+                    if lvl_jc is not None:
+                        level_rec["lvlJc"] = lvl_jc
+
+                suff_el = lvl.find(qn("w:suff"))
+                if suff_el is not None:
+                    suff = _str_attr(suff_el, "val")
+                    if suff is not None:
+                        level_rec["suff"] = suff
+
+                p_style_el = lvl.find(qn("w:pStyle"))
+                if p_style_el is not None:
+                    p_style = _str_attr(p_style_el, "val")
+                    if p_style is not None:
+                        level_rec["pStyle"] = p_style
+
+                level_ppr = self._parse_numbering_level_pPr(lvl)
+                if level_ppr:
+                    level_rec["level_pPr"] = level_ppr
+
+                lvl_rpr = self._parse_rPr(lvl.find(qn("w:rPr")))
+                if lvl_rpr:
+                    level_rec["level_rPr"] = lvl_rpr
+
                 levels[str(ilvl)] = level_rec
 
-            abstracts[abs_id] = {"levels": levels}
+            abs_rec: Dict[str, Any] = {"levels": levels}
+            mlt_el = absn.find(qn("w:multiLevelType"))
+            if mlt_el is not None:
+                mlt = _str_attr(mlt_el, "val")
+                if mlt is not None:
+                    abs_rec["multiLevelType"] = mlt
+            abstracts[abs_id] = abs_rec
 
         # numId -> abstractNumId + overrides
         out: Dict[str, Any] = {}
@@ -569,6 +642,9 @@ class UltimateParserV41:
             rec: Dict[str, Any] = {"levels": levels}
             if abs_id is not None:
                 rec["abstractNumId"] = abs_id
+                mlt = abstracts.get(abs_id, {}).get("multiLevelType")
+                if isinstance(mlt, str):
+                    rec["multiLevelType"] = mlt
             if lvl_overrides:
                 rec["lvl_overrides"] = lvl_overrides
 
@@ -912,7 +988,7 @@ class UltimateParserV41:
 
 if __name__ == "__main__":
     try:
-        cli = argparse.ArgumentParser(description="UltimateParserV41 DOCX -> RAW JSON")
+        cli = argparse.ArgumentParser(description="UltimateParserV42 DOCX -> RAW JSON")
         cli.add_argument("--in", dest="input_docx", default=os.path.join(BASE_DIR, "donor_v2.6.docx"))
         cli.add_argument("--out", dest="out_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
         args = cli.parse_args()

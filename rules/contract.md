@@ -1,5 +1,5 @@
 Reconstruction Contract v0.2
-(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV10 + RAW JSON Schema v2.8.2)
+(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV11 + RAW JSON Schema v2.8.3)
 
 0. Versioning
 - RAW JSON MUST declare:
@@ -7,9 +7,9 @@ Reconstruction Contract v0.2
   meta.rules_version
 - This contract corresponds to:
   rules_version = "0.2"
-  schema_version = "2.8.2"
-  parser_version = "v41"
-  reconstructor_version = "v10"
+  schema_version = "2.8.3"
+  parser_version = "v42"
+  reconstructor_version = "v11"
 
 1. General Principles
 1.1 Goal
@@ -56,7 +56,7 @@ Excluded / not guaranteed for deterministic behavior in this version:
 - Tables, drawings/images/shapes, fields, hyperlinks, headers/footers, footnotes/endnotes
 - Complex section breaks beyond one terminal sectPr
 - Advanced style inheritance beyond what the parser explicitly resolves into RAW
-- Run token types softHyphen and noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV10 (see RULE-RUN-COMPATIBILITY and RULE-RUN-UNSUPPORTED)
+- Run token types softHyphen and noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV11 (see RULE-RUN-COMPATIBILITY and RULE-RUN-UNSUPPORTED)
 
 2. Parsing Rules (DOCX → RAW)
 
@@ -93,8 +93,15 @@ Then RAW MUST store:
   p_format.numbering = { numId: string, ilvl: integer }
 If <w:ind w:hanging> exists, it MUST be stored per RULE-P-001.
 numbering.xml MUST be mapped into:
-  numbering_definitions[numId] = { abstractNumId?, levels, lvl_overrides? }
-No synthetic defaults are allowed.
+  numbering_definitions[numId] = { abstractNumId?, multiLevelType?, levels, lvl_overrides? }
+For each level, parser MUST preserve (if present in OOXML):
+- levels[ilvl].lvlJc
+- levels[ilvl].suff
+- levels[ilvl].pStyle
+- levels[ilvl].level_pPr (ind + tabs subset)
+- levels[ilvl].level_rPr (number style run properties)
+No synthetic defaults are allowed: if a source element is absent, corresponding RAW fields MUST be absent.
+These fields are required to preserve list geometry (number/text indentation and number style).
 
 RULE-P-006 — Spacing Preservation (no synthesis)
 If paragraph effective spacing is explicitly defined in OOXML (in paragraph pPr, style pPr, or docDefaults pPr):
@@ -112,6 +119,17 @@ Parser MUST set `meta.default_style_id` to the internal RAW style_id that corres
 The mapping MUST be based on effective formatting (docDefaults + style chain + that style's own pPr/rPr), then registered through the RAW styles library.
 This field does not bind content style_id values to Word `styleId`; it only selects the RAW base style used for generating Word Normal style.
 
+RULE-P-008 — Numbering Level Geometry (lvl pPr subset)
+If numbering.xml level contains:
+  <w:lvl ...><w:pPr>...</w:pPr></w:lvl>
+Parser MUST extract RAW level_pPr subset when present:
+  levels[ilvl].level_pPr.indentStartTwip   <- w:ind/@w:left
+  levels[ilvl].level_pPr.indentEndTwip     <- w:ind/@w:right
+  levels[ilvl].level_pPr.indentFirstLineTwip <- w:ind/@w:firstLine
+  levels[ilvl].level_pPr.indentHangingTwip <- w:ind/@w:hanging
+  levels[ilvl].level_pPr.tabs[] <- w:tabs/w:tab (posTwip/val/leader)
+Fields MUST be written only when present/parseable. No defaults are allowed.
+This geometry is required to preserve list number/text alignment.
 
 3. Reconstruction Rules (RAW → DOCX)
 
@@ -127,7 +145,7 @@ RULE-R-002 — Paragraph Formatting Emission
 For each content item:
 - A <w:p> MUST be emitted.
 - Paragraph properties MUST be emitted from styles[style_id].p_format.
-- content[].p_override exists in schema but is NOT applied by UltimateReconstructorV10 (see RULE-R-OVERRIDE-NYI).
+- content[].p_override exists in schema but is NOT applied by UltimateReconstructorV11 (see RULE-R-OVERRIDE-NYI).
 
 RULE-R-003 — Empty Paragraph Preservation
 If RAW paragraph has:
@@ -153,10 +171,10 @@ For run.type="text" (and run.type="sym" in this reconstructor):
   - starts with space, OR
   - ends with space, OR
   - contains two consecutive spaces
-(run.meta.preserve is allowed by schema but is not required by UltimateReconstructorV10.)
+(run.meta.preserve is allowed by schema but is not required by UltimateReconstructorV11.)
 
 RULE-R-007 — Token Emission
-Supported run types in UltimateReconstructorV10:
+Supported run types in UltimateReconstructorV11:
 - text  -> <w:t>
 - tab   -> <w:tab/>
 - break -> <w:br/> and optional @w:type from run.break_type if provided and valid
@@ -172,10 +190,10 @@ This hint is informational in v0.2 (no tab-to-indent conversion exists).
 
 RULE-R-OVERRIDE-NYI — Paragraph Overrides Not Yet Implemented
 content[].p_override is reserved by schema.
-UltimateReconstructorV10 does not apply p_override in this version.
-Therefore, for deterministic reconstruction with V10, producers SHOULD omit p_override or keep it empty.
+UltimateReconstructorV11 does not apply p_override in this version.
+Therefore, for deterministic reconstruction with V11, producers SHOULD omit p_override or keep it empty.
 
-RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v41 + Reconstructor v10)
+RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v42 + Reconstructor v11)
 Parsed + reconstructed (end-to-end):
 - text, tab, break, cr, sym
 Parsed only (not reconstructed):
@@ -183,11 +201,11 @@ Parsed only (not reconstructed):
 Unsupported in current scope:
 - run token content outside schema-defined run.type set
 
-RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V10
-Run types allowed by schema but ignored by UltimateReconstructorV10:
+RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V11
+Run types allowed by schema but ignored by UltimateReconstructorV11:
 - softHyphen, noBreakHyphen
 If present, they do not contribute to reconstructed XML in this version.
-For strict 1:1 determinism with V10, producers MUST NOT emit these run types.
+For strict 1:1 determinism with V11, producers MUST NOT emit these run types.
 
 RULE-R-009 — Package Parts
 Reconstructor MUST write:
@@ -199,6 +217,22 @@ Reconstructor MUST write:
 - word/numbering.xml only if numbering_definitions non-empty
 And the required relationships and [Content_Types].xml deterministically.
 
+RULE-R-010 — Numbering Level Geometry and Style Emission
+If RAW numbering record contains corresponding fields, reconstructor MUST emit in numbering.xml:
+- numbering_definitions[numId].multiLevelType -> <w:abstractNum><w:multiLevelType @w:val>
+- levels[ilvl].lvlJc -> <w:lvlJc @w:val>
+- levels[ilvl].suff -> <w:suff @w:val>
+- levels[ilvl].pStyle -> <w:pStyle @w:val>
+- levels[ilvl].level_pPr -> <w:pPr> subset:
+  - indentStartTwip -> w:ind/@w:left
+  - indentEndTwip -> w:ind/@w:right
+  - indentFirstLineTwip -> w:ind/@w:firstLine
+  - indentHangingTwip -> w:ind/@w:hanging
+  - tabs[] -> <w:tabs><w:tab .../></w:tabs>
+- levels[ilvl].level_rPr -> <w:rPr> using RAW run-format model keys.
+Missing fields MUST NOT be synthesized. If a field is absent in RAW, corresponding elements/attributes MUST NOT be emitted.
+This rule preserves list geometry (number/text indentation), multi-level behavior, and number style.
+
 4. Forbidden Transformations
 Parser/reconstructor MUST NOT:
 - merge runs during parsing
@@ -206,3 +240,4 @@ Parser/reconstructor MUST NOT:
 - remove empty paragraphs
 - synthesize missing formatting
 - drop explicit false/0 values present in RAW
+

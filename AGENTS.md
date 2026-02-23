@@ -232,12 +232,13 @@ END OF AGENTS MANIFEST
 
 ## 13. Operational Notes
 
-Official pipeline artifacts are stored in the working directory for each donor:
+Official pipeline artifacts are stored in ./data for each donor:
 - donor.materialized.docx
 - donor.json
 - donor.effective.json
 - donor.reconstructed.docx
 
 Operational rules:
+- Recommended launch: `python -m tools.run_pipeline donor.docx`
 - Effective materializer fills holes only and MUST NOT overwrite parsed RAW values.
 - If reconstructor fails, first verify materialization/enrichment were executed and RAW still contains required fields (for example numbering mappings).

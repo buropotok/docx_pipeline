@@ -1,6 +1,6 @@
-# UltimateReconstructorV10.py
-# Reconstructor Version: v10
-# Schema Version: 2.8.2
+# UltimateReconstructorV11.py
+# Reconstructor Version: v11
+# Schema Version: 2.8.3
 # Rules Version: 0.2
 
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
@@ -609,10 +609,11 @@ class UltimateReconstructorV10:
         for numId, rec in self.numbering_definitions.items():
             abs_id = rec.get("abstractNumId")
             levels = rec.get("levels", {}) or {}
+            multi_level_type = rec.get("multiLevelType")
             if abs_id is None:
                 raise ValueError(f"Contract violation: missing abstractNumId for numId={numId} in numbering. Run effective materializer or preserve numbering mappings.")
             if abs_id not in abstract_map:
-                abstract_map[abs_id] = {"levels": levels}
+                abstract_map[abs_id] = {"levels": levels, "multiLevelType": multi_level_type}
             else:
                 # keep first; deterministic
                 pass
@@ -620,6 +621,11 @@ class UltimateReconstructorV10:
         # Write abstractNum in sorted order for determinism
         for abs_id in sorted(abstract_map.keys(), key=lambda x: str(x)):
             abs_el = _w_sub(numbering, "abstractNum", attrib={f"{{{W_NS}}}abstractNumId": str(abs_id)})
+
+            multi_level_type = abstract_map[abs_id].get("multiLevelType")
+            if isinstance(multi_level_type, str):
+                mlt_el = _w_sub(abs_el, "multiLevelType")
+                _set_w_attr(mlt_el, "val", multi_level_type)
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
             # levels keys are strings of ints
@@ -633,14 +639,12 @@ class UltimateReconstructorV10:
                 if not isinstance(template, str):
                     continue
 
-
                 lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
                 if "start" in lvl_rec:
                     sv = _safe_int(lvl_rec.get("start"))
                     if sv is not None:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
-
 
                 fmt = lvl_rec.get("format")
                 if not isinstance(fmt, str):
@@ -654,7 +658,68 @@ class UltimateReconstructorV10:
                 lvlText = _w_sub(lvl_el, "lvlText")
                 _set_w_attr(lvlText, "val", template)
 
-                # minimal; can be extended later (lvlJc/pPr/rPr)
+                lvl_jc = lvl_rec.get("lvlJc")
+                if isinstance(lvl_jc, str):
+                    el = _w_sub(lvl_el, "lvlJc")
+                    _set_w_attr(el, "val", lvl_jc)
+
+                suff = lvl_rec.get("suff")
+                if isinstance(suff, str):
+                    el = _w_sub(lvl_el, "suff")
+                    _set_w_attr(el, "val", suff)
+
+                p_style = lvl_rec.get("pStyle")
+                if isinstance(p_style, str):
+                    el = _w_sub(lvl_el, "pStyle")
+                    _set_w_attr(el, "val", p_style)
+
+                level_ppr = lvl_rec.get("level_pPr")
+                if isinstance(level_ppr, dict):
+                    pPr_el = _w_sub(lvl_el, "pPr")
+
+                    has_ppr = False
+                    if any(k in level_ppr for k in ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")):
+                        ind_el = _w_sub(pPr_el, "ind")
+                        _set_w_attr_int(ind_el, "left", level_ppr.get("indentStartTwip"))
+                        _set_w_attr_int(ind_el, "right", level_ppr.get("indentEndTwip"))
+                        _set_w_attr_int(ind_el, "firstLine", level_ppr.get("indentFirstLineTwip"))
+                        _set_w_attr_int(ind_el, "hanging", level_ppr.get("indentHangingTwip"))
+                        if ind_el.attrib:
+                            has_ppr = True
+                        else:
+                            pPr_el.remove(ind_el)
+
+                    tabs = level_ppr.get("tabs")
+                    if isinstance(tabs, list) and tabs:
+                        tabs_el = _w_sub(pPr_el, "tabs")
+                        tabs_count = 0
+                        for tab in tabs:
+                            if not isinstance(tab, dict):
+                                continue
+                            pos = _safe_int(tab.get("posTwip"))
+                            val = tab.get("val")
+                            if pos is None or not isinstance(val, str):
+                                continue
+                            tab_el = _w_sub(tabs_el, "tab")
+                            _set_w_attr(tab_el, "pos", pos)
+                            _set_w_attr(tab_el, "val", val)
+                            leader = tab.get("leader")
+                            if isinstance(leader, str):
+                                _set_w_attr(tab_el, "leader", leader)
+                            tabs_count += 1
+                        if tabs_count > 0:
+                            has_ppr = True
+                        else:
+                            pPr_el.remove(tabs_el)
+
+                    if not has_ppr:
+                        lvl_el.remove(pPr_el)
+
+                level_rpr = lvl_rec.get("level_rPr")
+                if isinstance(level_rpr, dict) and level_rpr:
+                    rpr_el = self._build_rPr(level_rpr)
+                    if rpr_el is not None:
+                        lvl_el.append(rpr_el)
 
         # Write nums
         for numId in sorted(self.numbering_definitions.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
@@ -812,7 +877,7 @@ class UltimateReconstructorV10:
 
 if __name__ == "__main__":
     try:
-        cli = argparse.ArgumentParser(description="UltimateReconstructorV10 RAW JSON -> DOCX")
+        cli = argparse.ArgumentParser(description="UltimateReconstructorV11 RAW JSON -> DOCX")
         cli.add_argument("--in-json", dest="input_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
         cli.add_argument("--out-docx", dest="output_docx", default=os.path.join(BASE_DIR, "donor_v2.6_reconstructed.docx"))
         args = cli.parse_args()
