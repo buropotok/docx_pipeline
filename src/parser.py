@@ -578,6 +578,12 @@ class UltimateParserV41:
                 if st is not None:
                     level_rec["start"] = st
 
+                lvl_tab = lvl.find(qn("w:tab"))
+                if lvl_tab is not None:
+                    tab_pos = _int_attr(lvl_tab, "val")
+                    if tab_pos is not None:
+                        level_rec["tabPosTwip"] = tab_pos
+
                 lvl_jc_el = lvl.find(qn("w:lvlJc"))
                 if lvl_jc_el is not None:
                     lvl_jc = _str_attr(lvl_jc_el, "val")

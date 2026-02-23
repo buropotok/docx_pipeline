@@ -95,12 +95,14 @@ If <w:ind w:hanging> exists, it MUST be stored per RULE-P-001.
 numbering.xml MUST be mapped into:
   numbering_definitions[numId] = { abstractNumId?, multiLevelType?, levels, lvl_overrides? }
 For each level, parser MUST preserve (if present in OOXML):
+- levels[ilvl].tabPosTwip (from w:lvl/w:tab/@w:val)
 - levels[ilvl].lvlJc
 - levels[ilvl].suff
 - levels[ilvl].pStyle
 - levels[ilvl].level_pPr (ind + tabs subset)
 - levels[ilvl].level_rPr (number style run properties)
 No synthetic defaults are allowed: if a source element is absent, corresponding RAW fields MUST be absent.
+In particular, if donor level does not contain w:lvl/w:tab, parser MUST NOT add tabPosTwip.
 These fields are required to preserve list geometry (number/text indentation and number style).
 
 RULE-P-006 — Spacing Preservation (no synthesis)
@@ -220,6 +222,7 @@ And the required relationships and [Content_Types].xml deterministically.
 RULE-R-010 — Numbering Level Geometry and Style Emission
 If RAW numbering record contains corresponding fields, reconstructor MUST emit in numbering.xml:
 - numbering_definitions[numId].multiLevelType -> <w:abstractNum><w:multiLevelType @w:val>
+- levels[ilvl].tabPosTwip -> <w:tab @w:val> as direct child of <w:lvl>
 - levels[ilvl].lvlJc -> <w:lvlJc @w:val>
 - levels[ilvl].suff -> <w:suff @w:val>
 - levels[ilvl].pStyle -> <w:pStyle @w:val>
@@ -231,6 +234,7 @@ If RAW numbering record contains corresponding fields, reconstructor MUST emit i
   - tabs[] -> <w:tabs><w:tab .../></w:tabs>
 - levels[ilvl].level_rPr -> <w:rPr> using RAW run-format model keys.
 Missing fields MUST NOT be synthesized. If a field is absent in RAW, corresponding elements/attributes MUST NOT be emitted.
+In particular, reconstructor MUST NOT emit <w:lvl><w:tab/></w:lvl> when tabPosTwip is absent in RAW.
 This rule preserves list geometry (number/text indentation), multi-level behavior, and number style.
 
 4. Forbidden Transformations

@@ -291,7 +291,7 @@ class UltimateReconstructorV10:
 
         # indents
         ind_keys = ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")
-        if any(k in p_format for k in ind_keys):
+        if any((k in p_format) and (p_format.get(k) is not None) for k in ind_keys):
             ind = _w_sub(pPr, "ind")
             if "indentStartTwip" in p_format:
                 _set_w_attr_int(ind, "left", p_format.get("indentStartTwip"))
@@ -646,6 +646,13 @@ class UltimateReconstructorV10:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
 
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
+
                 fmt = lvl_rec.get("format")
                 if not isinstance(fmt, str):
                     continue
@@ -657,6 +664,12 @@ class UltimateReconstructorV10:
                     continue
                 lvlText = _w_sub(lvl_el, "lvlText")
                 _set_w_attr(lvlText, "val", template)
+
+                if "tabPosTwip" in lvl_rec:
+                    tab_pos = _safe_int(lvl_rec.get("tabPosTwip"))
+                    if tab_pos is not None:
+                        tab_el = _w_sub(lvl_el, "tab")
+                        _set_w_attr(tab_el, "val", tab_pos)
 
                 lvl_jc = lvl_rec.get("lvlJc")
                 if isinstance(lvl_jc, str):

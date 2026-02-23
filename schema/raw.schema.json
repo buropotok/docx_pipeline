@@ -400,6 +400,7 @@
                 "format": { "type": "string" },
                 "template": { "type": "string" },
                 "start": { "type": "integer" },
+                "tabPosTwip": { "type": "integer" },
                 "lvlJc": { "type": "string" },
                 "suff": { "type": "string" },
                 "pStyle": { "type": "string" },
