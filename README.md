@@ -1,191 +1,337 @@
-# DOCX Deterministic Pipeline
+TranslateFactory
+1. Purpose
 
-Deterministic DOCX ↔ RAW JSON pipeline for "forms" subset documents.
+TranslateFactory — детерминированная система подготовки нотариально заверяемых переводов документов.
 
-Current Versions:
+Система реализует воспроизводимый pipeline:
 
-- Schema: 2.8.1
-- Rules: 0.2
-- Reconstructor: UltimateReconstructorV10
-- Parser: (see src/parser.py version header)
+DOCX / Scan
+    → Canonical IR
+    → Fingerprints
+    → Knowledge Base alignment
+    → Filled IR
+    → Deterministic Reconstruction
+    → Final DOCX
 
----
+Система проектируется как аудитопригодная и версионируемая.
 
-# 1. Project Goal
+2. Repository Structure
+schema/                # JSON Schema (Canonical IR)
+rules/                 # Contract + invariants
+src/                   # parser / reconstructor
+tf_dagster/            # orchestration layer
+tools/                 # CLI utilities
+data/runs/<run_id>/    # run artifacts
+VERSION.md
+README.md
+3. Version Matrix (Strict Sync)
 
-This project implements a deterministic transformation pipeline:
+Все изменения синхронизируются по матрице:
 
-    DOCX → RAW JSON → DOCX
+Schema: 2.8.2
 
-The objective is:
+Rules: 0.2
 
-    Visually 1:1 reconstruction
-    for structured, certificate-like, form-style documents.
+Parser: v41
 
-RAW JSON is the only Intermediate Representation (IR).
+Reconstructor: v10
 
-No visual optimization.
-No synthetic defaults.
-No heuristic normalization.
+Изменение любого из компонентов требует:
 
-Determinism is mandatory.
+Обновления VERSION.md
 
----
+Проверки contract.md
 
-# 2. Repository Structure
-docx_pipeline/
-│
-├── AGENTS.md
-├── README.md
-├── VERSION.md
-│
-├── schema/
-│ └── raw.schema.json
-│
-├── rules/
-│ └── contract.md
-│
-├── src/
-│ ├── parser.py
-│ └── reconstructor.py
-│
-└── tests/
+Проверки совместимости parser/reconstructor
 
+Несогласованность версий запрещена.
 
----
+4. Canonical Pipeline
+4.1 Stage 0 — Word Materialization
 
-# 3. Core Architecture
+Asset:
 
-## 3.1 Parsing
+saveas_materialized
 
-The parser:
+Назначение:
 
-- Reads DOCX using lxml
-- Extracts structural information
-- Produces RAW JSON compliant with schema
-- Preserves:
-  - spacing
-  - numbering
-  - indents
-  - run order
-  - whitespace
+Приведение входного DOCX к стабильному формату через Word COM SaveAs
 
-No merging of runs during parsing.
+Нормализация скрытых особенностей Word
 
----
+Ограничения:
 
-## 3.2 Reconstruction
+COM изолирован
 
-The reconstructor:
+parser не зависит от COM
 
-- Builds DOCX using lxml (NO python-docx)
-- Uses RAW JSON as strict source of truth
-- Applies style-driven run model:
-  
-  base_r = styles[style_id].r_format  
-  effective_r = merge(base_r, run.diff)
+4.2 Stage 1 — Deterministic Parsing
 
-- Preserves xml:space rules deterministically
-- Emits minimal required OpenXML structure
+Asset:
 
----
+parse_raw_json
 
-# 4. Deterministic Rules
+Вход:
 
-See:
-rules/contract.md
+materialized.docx
 
-Key invariants:
+Выход:
 
-- No synthetic spacing
-- Zero values must not be dropped
-- No token reordering
-- No run merging during parsing
-- Empty paragraphs preserved
-- No implicit formatting inference
+raw.json
 
----
+Гарантии:
 
-# 5. Supported Features (v0.2 Scope)
+Pure
 
-✔ Paragraph formatting  
-✔ Indents (including hanging)  
-✔ Spacing (twip + lines + autospacing)  
-✔ Numbering with overrides  
-✔ Tabs  
-✔ Basic run formatting  
-✔ Page setup (sectPr)  
-✔ defaultTabStop  
+Без догадок
 
----
+Без synthetic значений
 
-# 6. Out of Scope
+Строго по schema
 
-Not supported in this version:
+Полная детерминированность
 
-- Tables
-- Images
-- Shapes
-- Fields
-- Hyperlinks
-- Headers/Footers
-- Footnotes
-- Multi-section documents beyond final sectPr
+4.3 Stage 2 — Cleaning (AI)
 
-Schema may define more fields than currently reconstructed.
-Implementation must catch up — schema must not be reduced.
+Артефакт:
 
----
+raw.cleaned.json
 
-# 7. How to Run
+Допустимые действия:
 
-## Reconstruct from RAW JSON
+whitespace normalization
 
-```bash
-python src/reconstructor.py
+удаление технического мусора
 
----
+структурная очистка
 
-## Windows pipeline (Word materialize -> parse -> enrich -> reconstruct)
+Запрещено:
 
-Requirements:
+генерация новых semantic значений
 
-```bash
-pip install -r requirements.txt
-```
+исправление логики документа
 
-Run:
+4.4 Stage 3 — Organizing (AI)
 
-```bash
-python tools/run_pipeline.py donor.docx  # reads /data/donor.docx by default
-```
+Артефакт:
 
-Note: Windows only, with installed Microsoft Word.
+raw.cleaned.organized.json
 
-By default pipeline artifacts are written into `/data`:
-- `/data/<name>.materialized.docx`
-- `/data/<name>.json`
-- `/data/<name>.effective.json`
-- `/data/<name>.reconstructed.docx`
+Добавляется:
 
-Raw ZIP contents are also extracted automatically for analysis:
-- `/data/raw/donor`
-- `/data/raw/materialized`
-- `/data/raw/reconstructed`
+SG (structural groups)
 
-Each run writes a diagnostic log:
-- `/data/logs/run_YYYYMMDD_HHMMSS.log`
+семантические блоки
 
+логическая структура
 
+4.5 Stage 4 — Docx Fingerprint
 
-## Official deterministic pipeline (Windows target flow)
+Артефакт:
 
-0) Word SaveAs materialization: `donor.docx -> donor.materialized.docx`  
-1) XML Parser: `donor.materialized.docx -> donor.json`  
-2) Effective materializer (Word COM enrichment): `donor.materialized.docx + donor.json -> donor.effective.json`  
-   - fill holes only, no overwrite of already parsed values  
-3) Reconstructor: `donor.effective.json -> donor.reconstructed.docx`
+docx_fingerprint.json
 
-For target documents, visual 1:1 geometry guarantee applies to reconstructor input `donor.effective.json`.
-SaveAs and enrichment are mandatory parts of the official pipeline for cases where source OOXML does not serialize effective Word defaults completely.
+Содержит:
 
+структурные сигнатуры
+
+признаки шаблонности
+
+repeat patterns
+
+Используется для:
+
+KB matching
+
+clustering
+
+winner selection
+
+4.6 Stage 5 — Filled Stage
+
+Артефакты:
+
+raw.cleaned.organized.filled.json
+docx_fingerprint.filled.json
+
+Инварианты:
+
+fill holes only
+
+no overwrite
+
+no synthetic
+
+no normalization outside contract
+
+После этого выполняется нормализация обратно в:
+
+raw.cleaned.organized.json
+docx_fingerprint.json
+4.7 Stage 6 — Reconstruction
+
+Asset:
+
+reconstruct_docx
+
+Вход:
+
+organized.json
+
+docx_fingerprint.json
+
+Выход:
+
+reconstructed.docx
+
+Гарантии:
+
+Строго детерминированный
+
+Fail-fast
+
+Не исправляет вход
+
+Не генерирует missing
+
+5. Orchestration (Dagster)
+
+Pipeline реализован через Dagster assets.
+
+Основные assets
+saveas_materialized
+parse_raw_json
+materialize_effective
+reconstruct_docx
+
+Full job:
+
+full_run_job
+
+Используется:
+
+Nothing
+
+non_argument_deps
+
+file-based run_dir
+
+6. Run Model
+
+Каждый запуск создаёт:
+
+data/runs/<run_id>/
+
+Типовая структура:
+
+input.docx
+materialized.docx
+unpacked_docx/
+raw.json
+raw.cleaned.json
+raw.cleaned.organized.json
+docx_fingerprint.json
+raw.cleaned.organized.filled.json
+docx_fingerprint.filled.json
+reconstructed.docx
+logs/
+
+Все артефакты сохраняются.
+
+Pipeline допускает перезапуск с любого промежуточного этапа.
+
+7. How to Run
+7.1 Запуск через Dagster
+
+Пример:
+
+dagster job execute -f tf_dagster/assets.py -j full_run_job
+
+(или через dagster dev UI)
+
+Параметризация input осуществляется через конфигурацию job / env.
+
+7.2 Ручной запуск parser
+python src/parser.py input.docx output_raw.json
+
+(если предусмотрен CLI)
+
+7.3 Ручной запуск reconstructor
+python src/reconstructor.py organized.json fingerprint.json output.docx
+8. Determinism Guarantees
+
+Система обеспечивает:
+
+Полную воспроизводимость
+
+Отсутствие скрытых мутаций
+
+Явные промежуточные состояния
+
+Отсутствие implicit state
+
+Версионирование схем
+
+Любой run можно:
+
+повторить
+
+сравнить
+
+диффировать
+
+аудитировать
+
+9. AI Boundary
+
+AI используется только в:
+
+cleaning
+
+organizing
+
+winner selection
+
+filling
+
+edits
+
+AI никогда не используется в:
+
+parsing
+
+reconstruction
+
+fingerprint, если запрещено контрактом
+
+10. Engineering Constraints
+
+Запрещено:
+
+синтетика вне разрешённого
+
+автоматическое исправление missing
+
+silent fallback
+
+implicit defaults
+
+merging runs
+
+Все изменения схем — только эволюционные.
+
+11. Roadmap (Engineering)
+
+Parameterized input
+
+Batch KB bootstrap
+
+COM concurrency limits
+
+Quarantine mechanism
+
+Retry policy
+
+Full online pipeline
+
+Production notarization mode
