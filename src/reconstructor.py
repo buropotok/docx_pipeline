@@ -654,13 +654,13 @@ class UltimateReconstructorV10:
                 if not isinstance(template, str):
                     continue
 
-                lvl_el = None
-                for existing_lvl in abs_el.findall(qn_w("lvl")):
-                    if _str_attr(existing_lvl, "ilvl") == str(ilvl_str):
-                        lvl_el = existing_lvl
-                        break
-                if lvl_el is None:
-                    lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
 
                 if "start" in lvl_rec:
                     sv = _safe_int(lvl_rec.get("start"))
