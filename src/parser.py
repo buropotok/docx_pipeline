@@ -1,7 +1,7 @@
-# UltimateParserV41.py
+# UltimateParserV42.py
 # DOCX -> RAW JSON (schema v2.7.x / v2.8-ish) using lxml (NO python-docx)
-# Parser Version: v41
-# Schema Version: 2.8.0
+# Parser Version: v42
+# Schema Version: 2.8.3
 # Rules Version: 0.2
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -10,10 +10,7 @@
 # 1) FIX: spacing autospacing flags parsed correctly from w:spacing attributes (not as child elements).
 # 2) ADD: spacing beforeLines/afterLines -> spaceBeforeLines/spaceAfterLines (if present).
 # 3) ADD BACK: rPr char spacing + position (charSpacingTwip, positionHalfPoints) that existed earlier.
-# 4) ADD: "materialize zeros" for spaceBeforeTwip/spaceAfterTwip in effective p_format when absent,
-#         so reconstructed "Normal" doesn't silently become Word default (8pt) on the other side.
-#         (This solves your "spaceAfterTwip not appearing" case when donor relies on implicit zeros.)
-# 5) ADD: meta.leading=true for the first tab run in a paragraph (schema supports meta.leading).
+# 4) ADD: meta.leading=true for the first tab run in a paragraph (schema supports meta.leading).
 #
 # Rules enforced:
 # - RULE-001: hanging -> indentHangingTwip
@@ -24,16 +21,19 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import zipfile
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from lxml import etree
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
+BASE_DIR = "."
 
 
 def qn(tag: str) -> str:
@@ -82,6 +82,20 @@ def _bool_from_attr(val: Optional[str]) -> Optional[bool]:
         return True
     # If some unexpected value appears, treat as True for presence semantics
     return True
+
+
+def _map_line_rule(val: Optional[str]) -> Optional[str]:
+    if val is None:
+        return None
+    mapping = {
+        "auto": "AUTO",
+        "atLeast": "AT_LEAST",
+        "exact": "EXACT",
+        "AUTO": "AUTO",
+        "AT_LEAST": "AT_LEAST",
+        "EXACT": "EXACT",
+    }
+    return mapping.get(val)
 
 
 def _merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
@@ -149,14 +163,16 @@ class UltimateParserV41:
     are ignored (proofErr etc.).
     """
 
-    # If donor relies on implicit "0" paragraph spacing, materialize zeros so reconstructor
-    # can set them explicitly and avoid Word's UI defaults (e.g., 8pt after).
-    MATERIALIZE_SPACING_ZEROS = True
-
     def __init__(self, docx_path: str):
         self.docx_path = docx_path
 
         with zipfile.ZipFile(docx_path, "r") as z:
+            self._docx_xml_parts: Dict[str, bytes] = {
+                name: z.read(name)
+                for name in z.namelist()
+                if name.endswith(".xml")
+            }
+
             self.document_xml = etree.fromstring(z.read("word/document.xml"))
 
             try:
@@ -192,24 +208,50 @@ class UltimateParserV41:
     # =========================
 
     def process(self) -> str:
+        settings: Dict[str, Any] = {}
+        default_tab_stop = self._parse_default_tab_stop()
+        if default_tab_stop is not None:
+            settings["defaultTabStopTwip"] = default_tab_stop
+
+        numbering_definitions = self._parse_numbering_definitions()
+        self._implied_numpr_by_word_style = self._build_implied_numpr_by_word_style(numbering_definitions)
+
         result: Dict[str, Any] = {
-            "document_info": {
-                "page_setup": self._parse_page_setup(),
-                "settings": {
-                    "defaultTabStopTwip": self._parse_default_tab_stop()
+            "meta": {
+                "schema_version": "2.8.3",
+                "rules_version": "0.2",
+                "producer": {
+                    "name": "UltimateParserV42",
+                    "version": "v42"
                 }
             },
-            "numbering_definitions": self._parse_numbering_definitions(),
+            "document_info": {
+                "page_setup": self._parse_page_setup(),
+                "settings": settings
+            },
+            "numbering_definitions": numbering_definitions,
             "styles": {},
             "content": []
         }
 
         body = self.document_xml.find(qn("w:body"))
+        default_word_style_id = self._get_default_word_paragraph_style_id()
+        paragraphs_count = 0
+        runs_count = 0
+
         if body is None:
+            if default_word_style_id is not None:
+                default_p_format = self._effective_p_format(default_word_style_id, None)
+                default_r_format = self._effective_r_format(default_word_style_id)
+                default_style_id = self._register_out_style(default_p_format, default_r_format, source_word_style_id=default_word_style_id)
+                result["meta"]["default_style_id"] = default_style_id
+            self._finalize_out_style_metadata(result["meta"].get("default_style_id"))
             result["styles"] = self.out_styles
+            print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
             return json.dumps(result, ensure_ascii=False, indent=2)
 
         for p in body.findall(qn("w:p")):
+            paragraphs_count += 1
             pPr = p.find(qn("w:pPr"))
             p_style_id = self._get_p_style_id(pPr)
 
@@ -223,6 +265,7 @@ class UltimateParserV41:
             para_mark_rPr = self._parse_rPr(pPr.find(qn("w:rPr")) if pPr is not None else None)
 
             runs = self._parse_runs(p, base_r_for_diff=style_r_format)
+            runs_count += len(runs)
 
             # RULE-006:
             if runs:
@@ -230,14 +273,23 @@ class UltimateParserV41:
             else:
                 base_r_for_style = _merge(style_r_format, para_mark_rPr)
 
-            style_id = self._register_out_style(base_p_format, base_r_for_style)
+            style_id = self._register_out_style(base_p_format, base_r_for_style, source_word_style_id=p_style_id)
 
-            result["content"].append({
-                "style_id": style_id,
-                "runs": runs
-            })
+            item: Dict[str, Any] = {"style_id": style_id, "runs": runs}
+            if p_style_id is not None:
+                item["source_word_style_id"] = p_style_id
+            result["content"].append(item)
 
+        if default_word_style_id is not None:
+            default_p_format = self._effective_p_format(default_word_style_id, None)
+            default_r_format = self._effective_r_format(default_word_style_id)
+            default_style_id = self._register_out_style(default_p_format, default_r_format, source_word_style_id=default_word_style_id)
+            result["meta"]["default_style_id"] = default_style_id
+
+        # Finalize style materialization metadata (titles/word ids) deterministically (Stage 1; reconstructor may ignore).
+        self._finalize_out_style_metadata(result["meta"].get("default_style_id"))
         result["styles"] = self.out_styles
+        print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     # =========================
@@ -291,6 +343,16 @@ class UltimateParserV41:
             if is_default in ("1", "true"):
                 self.default_paragraph_style_id = st_id
 
+    def _get_default_word_paragraph_style_id(self) -> Optional[str]:
+        if self.styles_xml is not None:
+            for st in self.styles_xml.findall(qn("w:style")):
+                st_type = _str_attr(st, "type")
+                st_id = _str_attr(st, "styleId")
+                is_default = _str_attr(st, "default")
+                if st_type == "paragraph" and st_id and is_default in ("1", "true"):
+                    return st_id
+        return self.default_paragraph_style_id
+
     def _get_p_style_id(self, pPr: Optional[etree._Element]) -> Optional[str]:
         if pPr is None:
             return self.default_paragraph_style_id
@@ -310,18 +372,56 @@ class UltimateParserV41:
                 base = _merge(base, ws.pPr)
 
         # direct pPr overrides
-        base = _merge(base, self._parse_pPr(direct_pPr))
+        direct = self._parse_pPr(direct_pPr, include_indent_origin=True)
+        base = _merge(base, direct)
 
-        # IMPORTANT FIX for your case:
-        # if donor relies on implicit zeros for spacing, materialize them explicitly
-        # so reconstructor won't get Word default "8pt after".
-        if self.MATERIALIZE_SPACING_ZEROS:
-            if "spaceBeforeTwip" not in base:
-                base["spaceBeforeTwip"] = 0
-            if "spaceAfterTwip" not in base:
-                base["spaceAfterTwip"] = 0
+        # Style-linked numbering: if numbering.xml lvl has <w:pStyle>, Word applies numbering even
+        # when paragraph has no explicit <w:numPr>. Materialize it deterministically from donor.
+        if "numbering" not in base and style_id is not None:
+            implied = getattr(self, "_implied_numpr_by_word_style", {}).get(style_id)
+            if implied is not None and "numbering" not in direct:
+                base["numbering"] = implied
 
         return base
+
+    def _build_implied_numpr_by_word_style(self, numbering_definitions: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Build mapping wordStyleId -> implied numPr ({numId, ilvl}) from numbering.xml lvl/pStyle links.
+        Deterministic tie-break: minimal numeric numId, then minimal ilvl; non-numeric numId sorted last.
+        """
+        tmp: Dict[str, List[Tuple[str, int]]] = {}
+
+        def _num_key(n: str) -> Tuple[int, str]:
+            try:
+                return (int(n), n)
+            except Exception:
+                return (10**9, n)
+
+        for numId, rec in (numbering_definitions or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            levels = rec.get("levels") or {}
+            if not isinstance(levels, dict):
+                continue
+            for ilvl_str, lvl in levels.items():
+                if not isinstance(lvl, dict):
+                    continue
+                pStyle = lvl.get("pStyle")
+                if not isinstance(pStyle, str) or not pStyle:
+                    continue
+                try:
+                    ilvl_int = int(ilvl_str)
+                except Exception:
+                    continue
+                tmp.setdefault(pStyle, []).append((str(numId), ilvl_int))
+
+        out: Dict[str, Dict[str, Any]] = {}
+        for style_id, pairs in tmp.items():
+            pairs_sorted = sorted(pairs, key=lambda x: (_num_key(x[0]), x[1]))
+            numId, ilvl = pairs_sorted[0]
+            out[style_id] = {"numId": numId, "ilvl": ilvl}
+
+        return out
 
     def _effective_r_format(self, style_id: Optional[str]) -> Dict[str, Any]:
         base = dict(self.doc_defaults_r)
@@ -352,21 +452,64 @@ class UltimateParserV41:
     # OUTPUT STYLE LIBRARY (schema.styles)
     # =========================
 
-    def _register_out_style(self, p_format: Dict[str, Any], r_format: Dict[str, Any]) -> str:
-        style_obj = {
-            "p_format": p_format or {},
-            "r_format": r_format or {},
-        }
+    def _register_out_style(
+        self,
+        p_format: Dict[str, Any],
+        r_format: Dict[str, Any],
+        source_word_style_id: Optional[str] = None
+    ) -> str:
+        style_obj = {"p_format": p_format or {}, "r_format": r_format or {}}
+
+        # IMPORTANT: de-dup key must remain based ONLY on formatting (no metadata).
         key = _stable_json_key(style_obj)
         existing = self._style_key_to_id.get(key)
         if existing:
+            if source_word_style_id is not None:
+                cur = self.out_styles.get(existing, {})
+                # keep first seen for determinism; do not override
+                if isinstance(cur, dict) and cur.get("source_word_style_id") is None:
+                    cur["source_word_style_id"] = source_word_style_id
             return existing
 
         style_id = f"s{self._style_counter:04d}"
         self._style_counter += 1
         self._style_key_to_id[key] = style_id
+        if source_word_style_id is not None:
+            style_obj["source_word_style_id"] = source_word_style_id
         self.out_styles[style_id] = style_obj
         return style_id
+
+    def _finalize_out_style_metadata(self, default_style_id: Optional[str]) -> None:
+        """
+        Stage 1: assign deterministic user-friendly titles and planned Word style ids.
+        - default style: title="Обычный"
+        - others: "Стиль 1", "Стиль 2", ... in style_id order (excluding default)
+        - word_style_id: "TF_<style_id>"
+        """
+        style_ids = sorted(self.out_styles.keys())
+
+        # word_style_id for all styles
+        for sid in style_ids:
+            st = self.out_styles.get(sid)
+            if isinstance(st, dict) and st.get("word_style_id") is None:
+                st["word_style_id"] = f"TF_{sid}"
+
+        # titles
+        if default_style_id is not None and default_style_id in self.out_styles:
+            st0 = self.out_styles.get(default_style_id)
+            if isinstance(st0, dict):
+                st0["title"] = "Обычный"
+
+        n = 1
+        for sid in style_ids:
+            if sid == default_style_id:
+                continue
+            st = self.out_styles.get(sid)
+            if not isinstance(st, dict):
+                continue
+            if st.get("title") is None:
+                st["title"] = f"Стиль {n}"
+                n += 1
 
     # =========================
     # DOCUMENT INFO
@@ -456,6 +599,46 @@ class UltimateParserV41:
     # NUMBERING (no synthetic defaults)
     # =========================
 
+    def _parse_numbering_level_pPr(self, lvl: etree._Element) -> Dict[str, Any]:
+        ppr = lvl.find(qn("w:pPr"))
+        if ppr is None:
+            return {}
+
+        out: Dict[str, Any] = {}
+
+        ind = ppr.find(qn("w:ind"))
+        if ind is not None:
+            left = _int_attr(ind, "left")
+            right = _int_attr(ind, "right")
+            first = _int_attr(ind, "firstLine")
+            hanging = _int_attr(ind, "hanging")
+            if left is not None:
+                out["indentStartTwip"] = left
+            if right is not None:
+                out["indentEndTwip"] = right
+            if first is not None:
+                out["indentFirstLineTwip"] = first
+            if hanging is not None:
+                out["indentHangingTwip"] = hanging
+
+        tabs = ppr.find(qn("w:tabs"))
+        if tabs is not None:
+            arr: List[Dict[str, Any]] = []
+            for t in tabs.findall(qn("w:tab")):
+                pos = _int_attr(t, "pos")
+                val = _str_attr(t, "val")
+                leader = _str_attr(t, "leader")
+                if pos is None or val is None:
+                    continue
+                rec: Dict[str, Any] = {"posTwip": pos, "val": val}
+                if leader is not None:
+                    rec["leader"] = leader
+                arr.append(rec)
+            if arr:
+                out["tabs"] = arr
+
+        return out
+
     def _parse_numbering_definitions(self) -> Dict[str, Any]:
         if self.numbering_xml is None:
             return {}
@@ -488,11 +671,51 @@ class UltimateParserV41:
                 level_rec: Dict[str, Any] = {
                     "format": fmt,
                     "template": template,
-                    "start": st if st is not None else 1
                 }
+                if st is not None:
+                    level_rec["start"] = st
+
+                lvl_tab = lvl.find(qn("w:tab"))
+                if lvl_tab is not None:
+                    tab_pos = _int_attr(lvl_tab, "val")
+                    if tab_pos is not None:
+                        level_rec["tabPosTwip"] = tab_pos
+
+                lvl_jc_el = lvl.find(qn("w:lvlJc"))
+                if lvl_jc_el is not None:
+                    lvl_jc = _str_attr(lvl_jc_el, "val")
+                    if lvl_jc is not None:
+                        level_rec["lvlJc"] = lvl_jc
+
+                suff_el = lvl.find(qn("w:suff"))
+                if suff_el is not None:
+                    suff = _str_attr(suff_el, "val")
+                    if suff is not None:
+                        level_rec["suff"] = suff
+
+                p_style_el = lvl.find(qn("w:pStyle"))
+                if p_style_el is not None:
+                    p_style = _str_attr(p_style_el, "val")
+                    if p_style is not None:
+                        level_rec["pStyle"] = p_style
+
+                level_ppr = self._parse_numbering_level_pPr(lvl)
+                if level_ppr:
+                    level_rec["level_pPr"] = level_ppr
+
+                lvl_rpr = self._parse_rPr(lvl.find(qn("w:rPr")))
+                if lvl_rpr:
+                    level_rec["level_rPr"] = lvl_rpr
+
                 levels[str(ilvl)] = level_rec
 
-            abstracts[abs_id] = {"levels": levels}
+            abs_rec: Dict[str, Any] = {"levels": levels}
+            mlt_el = absn.find(qn("w:multiLevelType"))
+            if mlt_el is not None:
+                mlt = _str_attr(mlt_el, "val")
+                if mlt is not None:
+                    abs_rec["multiLevelType"] = mlt
+            abstracts[abs_id] = abs_rec
 
         # numId -> abstractNumId + overrides
         out: Dict[str, Any] = {}
@@ -522,6 +745,9 @@ class UltimateParserV41:
             rec: Dict[str, Any] = {"levels": levels}
             if abs_id is not None:
                 rec["abstractNumId"] = abs_id
+                mlt = abstracts.get(abs_id, {}).get("multiLevelType")
+                if isinstance(mlt, str):
+                    rec["multiLevelType"] = mlt
             if lvl_overrides:
                 rec["lvl_overrides"] = lvl_overrides
 
@@ -533,7 +759,7 @@ class UltimateParserV41:
     # PARAGRAPH FORMATTING (pPr -> pFormat)
     # =========================
 
-    def _parse_pPr(self, pPr: Optional[etree._Element]) -> Dict[str, Any]:
+    def _parse_pPr(self, pPr: Optional[etree._Element], include_indent_origin: bool = False) -> Dict[str, Any]:
         """
         Parse paragraph properties (w:pPr) -> p_format (schema).
         Goal: visually-lossless. IMPORTANT: keep explicit zeros (0) if present in XML.
@@ -568,12 +794,20 @@ class UltimateParserV41:
 
             if left is not None:
                 out["indentStartTwip"] = left
+                if include_indent_origin:
+                    out["indentStartTwipOrigin"] = "direct"
             if right is not None:
                 out["indentEndTwip"] = right
+                if include_indent_origin:
+                    out["indentEndTwipOrigin"] = "direct"
             if first is not None:
                 out["indentFirstLineTwip"] = first
+                if include_indent_origin:
+                    out["indentFirstLineTwipOrigin"] = "direct"
             if hanging is not None:
                 out["indentHangingTwip"] = hanging  # RULE-001
+                if include_indent_origin:
+                    out["indentHangingTwipOrigin"] = "direct"
 
         # spacing (w:spacing)  <-- keep explicit zeros
         spacing = pPr.find(qn("w:spacing"))
@@ -583,7 +817,7 @@ class UltimateParserV41:
             beforeLines = _int_attr(spacing, "beforeLines")
             afterLines = _int_attr(spacing, "afterLines")
             line = _int_attr(spacing, "line")
-            lineRule = _str_attr(spacing, "lineRule")
+            lineRule = _map_line_rule(_str_attr(spacing, "lineRule"))
 
             # FIX: autospacing are ATTRIBUTES on w:spacing
             beforeAuto = _bool_from_attr(spacing.get(f"{{{W_NS}}}beforeAutospacing"))
@@ -600,9 +834,7 @@ class UltimateParserV41:
 
             if line is not None:
                 out["lineTwip"] = line
-            if lineRule:
-                # V41 said "keep lineRule as-is" BUT code previously normalized.
-                # Here we store the raw attribute value to avoid inventing enums.
+            if lineRule is not None:
                 out["lineRule"] = lineRule
 
             if beforeAuto is not None:
@@ -638,11 +870,6 @@ class UltimateParserV41:
                 if ilvl_val is not None and num_val is not None:
                     out["numbering"] = {"numId": num_val, "ilvl": ilvl_val}
 
-        # hyphenation control (галка "запрет переноса слов")
-        sah = pPr.find(qn("w:suppressAutoHyphens"))
-        if sah is not None:
-            out["suppressAutoHyphens"] = _bool_present(sah)
-
         # keep/widow/etc
         kn = pPr.find(qn("w:keepNext"))
         if kn is not None:
@@ -671,8 +898,21 @@ class UltimateParserV41:
         ta = pPr.find(qn("w:textAlignment"))
         if ta is not None:
             v = _str_attr(ta, "val")
-            if v:
-                out["textAlignment"] = v
+            text_align_map = {
+                "auto": "AUTO",
+                "baseline": "BASELINE",
+                "top": "TOP",
+                "center": "CENTER",
+                "bottom": "BOTTOM",
+                "AUTO": "AUTO",
+                "BASELINE": "BASELINE",
+                "TOP": "TOP",
+                "CENTER": "CENTER",
+                "BOTTOM": "BOTTOM",
+            }
+            mapped = text_align_map.get(v) if v is not None else None
+            if mapped is not None:
+                out["textAlignment"] = mapped
 
         return out
 
@@ -691,8 +931,7 @@ class UltimateParserV41:
         if rFonts is not None:
             rf: Dict[str, Any] = {}
             for k in ("ascii", "hAnsi", "eastAsia", "cs",
-                      "asciiTheme", "hAnsiTheme", "eastAsiaTheme", "csTheme",
-                      "hint"):
+                      "asciiTheme", "hAnsiTheme", "eastAsiaTheme", "csTheme"):
                 v = rFonts.get(f"{{{W_NS}}}{k}")
                 if v is not None:
                     rf[k] = v
@@ -818,14 +1057,16 @@ class UltimateParserV41:
 
                 elif node.tag == qn("w:br"):
                     run_obj: Dict[str, Any] = {"type": "break"}
+                    br_type = node.get(f"{{{W_NS}}}type")
+                    if br_type in ("textWrapping", "page", "column"):
+                        run_obj["break_type"] = br_type
                     if r_diff:
                         run_obj["diff"] = r_diff
                     out.append(run_obj)
                     first_emitted = True
 
                 elif node.tag == qn("w:cr"):
-                    # schema doesn't have separate "cr", represent as break
-                    run_obj: Dict[str, Any] = {"type": "break"}
+                    run_obj: Dict[str, Any] = {"type": "cr"}
                     if r_diff:
                         run_obj["diff"] = r_diff
                     out.append(run_obj)
@@ -846,12 +1087,29 @@ class UltimateParserV41:
 
         return out
 
+    def dump_donor_xml_parts(self, out_root_dir: str) -> None:
+        os.makedirs(out_root_dir, exist_ok=True)
+        for name, data in sorted(self._docx_xml_parts.items()):
+            out_path = os.path.join(out_root_dir, name)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(data)
+
+
 
 if __name__ == "__main__":
     try:
-        parser = UltimateParserV41("E:/Buro_potok/tmp/donor_v2.6.docx")
-        with open("E:/Buro_potok/tmp/donor_result_v4.1_plus.json", "w", encoding="utf-8") as f:
+        cli = argparse.ArgumentParser(description="UltimateParserV42 DOCX -> RAW JSON")
+        cli.add_argument("--in", dest="input_docx", default=os.path.join(BASE_DIR, "donor_v2.6.docx"))
+        cli.add_argument("--out", dest="out_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
+        args = cli.parse_args()
+
+        parser = UltimateParserV41(args.input_docx)
+
+        os.makedirs(os.path.dirname(args.out_json) or ".", exist_ok=True)
+        with open(args.out_json, "w", encoding="utf-8") as f:
             f.write(parser.process())
+
         print("Парсинг v4.1+ (lxml) завершен успешно!")
     except Exception:
         import traceback
