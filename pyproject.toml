@@ -1,0 +1,3 @@
+[tool.dagster]
+module_name = "tf_dagster.definitions"
+attribute = "defs"
