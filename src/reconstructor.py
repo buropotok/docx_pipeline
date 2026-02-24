@@ -314,7 +314,7 @@ class UltimateReconstructorV10:
 
         # indents
         ind_keys = ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")
-        if (not has_numpr) and any((k in p_format) and (p_format.get(k) is not None) for k in ind_keys):
+        if any((k in p_format) and (p_format.get(k) is not None) for k in ind_keys):
             ind = _w_sub(pPr, "ind")
             if "indentStartTwip" in p_format:
                 _set_w_attr_int(ind, "left", p_format.get("indentStartTwip"))

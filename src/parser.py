@@ -26,7 +26,7 @@ import json
 import os
 import zipfile
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from lxml import etree
 
@@ -212,6 +212,10 @@ class UltimateParserV41:
         default_tab_stop = self._parse_default_tab_stop()
         if default_tab_stop is not None:
             settings["defaultTabStopTwip"] = default_tab_stop
+
+        numbering_definitions = self._parse_numbering_definitions()
+        self._implied_numpr_by_word_style = self._build_implied_numpr_by_word_style(numbering_definitions)
+
         result: Dict[str, Any] = {
             "meta": {
                 "schema_version": "2.8.3",
@@ -225,7 +229,7 @@ class UltimateParserV41:
                 "page_setup": self._parse_page_setup(),
                 "settings": settings
             },
-            "numbering_definitions": self._parse_numbering_definitions(),
+            "numbering_definitions": numbering_definitions,
             "styles": {},
             "content": []
         }
@@ -365,9 +369,56 @@ class UltimateParserV41:
                 base = _merge(base, ws.pPr)
 
         # direct pPr overrides
-        base = _merge(base, self._parse_pPr(direct_pPr, include_indent_origin=True))
+        direct = self._parse_pPr(direct_pPr, include_indent_origin=True)
+        base = _merge(base, direct)
+
+        # Style-linked numbering: if numbering.xml lvl has <w:pStyle>, Word applies numbering even
+        # when paragraph has no explicit <w:numPr>. Materialize it deterministically from donor.
+        if "numbering" not in base and style_id is not None:
+            implied = getattr(self, "_implied_numpr_by_word_style", {}).get(style_id)
+            if implied is not None and "numbering" not in direct:
+                base["numbering"] = implied
 
         return base
+
+    def _build_implied_numpr_by_word_style(self, numbering_definitions: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Build mapping wordStyleId -> implied numPr ({numId, ilvl}) from numbering.xml lvl/pStyle links.
+        Deterministic tie-break: minimal numeric numId, then minimal ilvl; non-numeric numId sorted last.
+        """
+        tmp: Dict[str, List[Tuple[str, int]]] = {}
+
+        def _num_key(n: str) -> Tuple[int, str]:
+            try:
+                return (int(n), n)
+            except Exception:
+                return (10**9, n)
+
+        for numId, rec in (numbering_definitions or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            levels = rec.get("levels") or {}
+            if not isinstance(levels, dict):
+                continue
+            for ilvl_str, lvl in levels.items():
+                if not isinstance(lvl, dict):
+                    continue
+                pStyle = lvl.get("pStyle")
+                if not isinstance(pStyle, str) or not pStyle:
+                    continue
+                try:
+                    ilvl_int = int(ilvl_str)
+                except Exception:
+                    continue
+                tmp.setdefault(pStyle, []).append((str(numId), ilvl_int))
+
+        out: Dict[str, Dict[str, Any]] = {}
+        for style_id, pairs in tmp.items():
+            pairs_sorted = sorted(pairs, key=lambda x: (_num_key(x[0]), x[1]))
+            numId, ilvl = pairs_sorted[0]
+            out[style_id] = {"numId": numId, "ilvl": ilvl}
+
+        return out
 
     def _effective_r_format(self, style_id: Optional[str]) -> Dict[str, Any]:
         base = dict(self.doc_defaults_r)
