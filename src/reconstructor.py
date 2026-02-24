@@ -642,8 +642,14 @@ class UltimateReconstructorV10:
                 _set_w_attr(mlt_el, "val", multi_level_type)
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
+            seen_ilvls = set()
             # levels keys are strings of ints
             for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
+                ilvl_value = str(_safe_int(ilvl_str)) if str(ilvl_str).isdigit() else str(ilvl_str)
+                if ilvl_value in seen_ilvls:
+                    continue
+                seen_ilvls.add(ilvl_value)
+
                 lvl_rec = levels[ilvl_str] or {}
                 fmt = lvl_rec.get("format")
                 if not isinstance(fmt, str):
@@ -653,7 +659,7 @@ class UltimateReconstructorV10:
                 if not isinstance(template, str):
                     continue
 
-                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": ilvl_value})
                 if "start" in lvl_rec:
                     sv = _safe_int(lvl_rec.get("start"))
                     if sv is not None:
