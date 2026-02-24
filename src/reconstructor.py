@@ -208,9 +208,7 @@ class UltimateReconstructorV10:
                     ("indentHangingTwip", "indentHangingTwipOrigin"),
                 ]
                 for indent_key, origin_key in indent_pairs:
-                    if origin_key in p_format_for_emit and p_format_for_emit.get(origin_key) != "direct":
-                        p_format_for_emit.pop(indent_key, None)
-                    elif origin_key not in p_format_for_emit:
+                    if p_format_for_emit.get(origin_key) == "style":
                         p_format_for_emit.pop(indent_key, None)
                     p_format_for_emit.pop(origin_key, None)
 
