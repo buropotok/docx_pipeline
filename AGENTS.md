@@ -31,7 +31,7 @@ No visual optimization is allowed.
 
 Pipeline:
 
-    DOCX → Parser → RAW JSON → Reconstructor → DOCX
+    DOCX → Word SaveAs (materialize) → Parser → Effective Materializer → RAW JSON → Reconstructor → DOCX
 
 Key components:
 
@@ -68,6 +68,8 @@ that are not present in source OOXML or RAW.
 Zero values (0) MUST NOT be dropped.
 
 Use explicit `is not None` checks.
+
+Note: deterministic style metadata (e.g., styles[].title / styles[].word_style_id / styles[].source_word_style_id and content[].source_word_style_id) is permitted as IR enrichment for future styles.xml materialization. It must not change formatting semantics and must not be based on guesses.
 
 ---
 
@@ -142,9 +144,11 @@ Do NOT implement unless version is bumped:
 - Advanced style inheritance
 
 Run types allowed by schema but NOT reconstructed:
-- cr
 - softHyphen
 - noBreakHyphen
+
+Run type supported end-to-end (parse + reconstruct):
+- cr
 
 If implementing them:
 - bump Schema + Rules version
@@ -226,3 +230,17 @@ No breaking changes without explicit version bump.
 ---
 
 END OF AGENTS MANIFEST
+
+
+## 13. Operational Notes
+
+Official pipeline artifacts are stored in ./data for each donor:
+- donor.materialized.docx
+- donor.json
+- donor.effective.json
+- donor.reconstructed.docx
+
+Operational rules:
+- Recommended launch: `python -m tools.run_pipeline donor.docx`
+- Effective materializer fills holes only and MUST NOT overwrite parsed RAW values.
+- If reconstructor fails, first verify materialization/enrichment were executed and RAW still contains required fields (for example numbering mappings).
