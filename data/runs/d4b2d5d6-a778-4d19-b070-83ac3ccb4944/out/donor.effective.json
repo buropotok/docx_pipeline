@@ -1,0 +1,1369 @@
+{
+  "meta": {
+    "schema_version": "2.8.3",
+    "rules_version": "0.2",
+    "producer": {
+      "name": "UltimateParserV42",
+      "version": "v42"
+    },
+    "default_style_id": "s0009"
+  },
+  "document_info": {
+    "page_setup": {
+      "pageWidthTwip": 11906,
+      "pageHeightTwip": 16838,
+      "marginLeftTwip": 1701,
+      "marginRightTwip": 850,
+      "marginTopTwip": 1134,
+      "marginBottomTwip": 1134,
+      "headerTwip": 0,
+      "footerTwip": 0,
+      "gutterTwip": 0,
+      "cols": {
+        "spaceTwip": 720
+      }
+    },
+    "settings": {
+      "defaultTabStopTwip": 708
+    }
+  },
+  "numbering_definitions": {
+    "1": {
+      "levels": {
+        "0": {
+          "format": "decimal",
+          "template": "%1.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 720,
+            "indentHangingTwip": 360
+          }
+        },
+        "1": {
+          "format": "lowerLetter",
+          "template": "%2.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 1440,
+            "indentHangingTwip": 360
+          }
+        },
+        "2": {
+          "format": "lowerRoman",
+          "template": "%3.",
+          "start": 1,
+          "lvlJc": "right",
+          "level_pPr": {
+            "indentStartTwip": 2160,
+            "indentHangingTwip": 180
+          }
+        },
+        "3": {
+          "format": "decimal",
+          "template": "%4.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 2880,
+            "indentHangingTwip": 360
+          }
+        },
+        "4": {
+          "format": "lowerLetter",
+          "template": "%5.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 3600,
+            "indentHangingTwip": 360
+          }
+        },
+        "5": {
+          "format": "lowerRoman",
+          "template": "%6.",
+          "start": 1,
+          "lvlJc": "right",
+          "level_pPr": {
+            "indentStartTwip": 4320,
+            "indentHangingTwip": 180
+          }
+        },
+        "6": {
+          "format": "decimal",
+          "template": "%7.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 5040,
+            "indentHangingTwip": 360
+          }
+        },
+        "7": {
+          "format": "lowerLetter",
+          "template": "%8.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 5760,
+            "indentHangingTwip": 360
+          }
+        },
+        "8": {
+          "format": "lowerRoman",
+          "template": "%9.",
+          "start": 1,
+          "lvlJc": "right",
+          "level_pPr": {
+            "indentStartTwip": 6480,
+            "indentHangingTwip": 180
+          }
+        }
+      },
+      "abstractNumId": "0",
+      "multiLevelType": "hybridMultilevel"
+    },
+    "2": {
+      "levels": {
+        "0": {
+          "format": "decimal",
+          "template": "%1)",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 360,
+            "indentHangingTwip": 360
+          }
+        },
+        "1": {
+          "format": "lowerLetter",
+          "template": "%2)",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 720,
+            "indentHangingTwip": 360
+          }
+        },
+        "2": {
+          "format": "lowerRoman",
+          "template": "%3)",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 1080,
+            "indentHangingTwip": 360
+          }
+        },
+        "3": {
+          "format": "decimal",
+          "template": "(%4)",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 1440,
+            "indentHangingTwip": 360
+          }
+        },
+        "4": {
+          "format": "lowerLetter",
+          "template": "(%5)",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 1800,
+            "indentHangingTwip": 360
+          }
+        },
+        "5": {
+          "format": "lowerRoman",
+          "template": "(%6)",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 2160,
+            "indentHangingTwip": 360
+          }
+        },
+        "6": {
+          "format": "decimal",
+          "template": "%7.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 2520,
+            "indentHangingTwip": 360
+          }
+        },
+        "7": {
+          "format": "lowerLetter",
+          "template": "%8.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 2880,
+            "indentHangingTwip": 360
+          }
+        },
+        "8": {
+          "format": "lowerRoman",
+          "template": "%9.",
+          "start": 1,
+          "lvlJc": "left",
+          "level_pPr": {
+            "indentStartTwip": 3240,
+            "indentHangingTwip": 360
+          }
+        }
+      },
+      "abstractNumId": "1",
+      "multiLevelType": "multilevel"
+    }
+  },
+  "styles": {
+    "s0001": {
+      "p_format": {
+        "alignment": "RIGHT"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0002": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "bold": true,
+        "italic": true
+      }
+    },
+    "s0003": {
+      "p_format": {
+        "indentStartTwip": 708,
+        "numbering": {
+          "numId": "2",
+          "ilvl": 0
+        }
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0004": {
+      "p_format": {
+        "indentStartTwip": 708,
+        "numbering": {
+          "numId": "2",
+          "ilvl": 1
+        }
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0005": {
+      "p_format": {
+        "alignment": "RIGHT"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "val": "en-US"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0006": {
+      "p_format": {
+        "alignment": "RIGHT"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "bold": true
+      }
+    },
+    "s0007": {
+      "p_format": {
+        "alignment": "CENTER"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0008": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "bold": true
+      }
+    },
+    "s0009": {
+      "p_format": {
+        "lineRule": "AUTO",
+        "lineTwip": 240,
+        "spaceAfterTwip": 0,
+        "spaceBeforeTwip": 0
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0010": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "underline": "single",
+        "vertical_align": "superscript"
+      }
+    },
+    "s0011": {
+      "p_format": {
+        "alignment": "CENTER"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "underline": "single",
+        "vertical_align": "superscript",
+        "all_caps": true
+      }
+    },
+    "s0012": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "underline": "single",
+        "all_caps": true
+      }
+    },
+    "s0013": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24,
+        "underline": "single"
+      }
+    },
+    "s0014": {
+      "p_format": {
+        "indentStartTwip": 6372,
+        "indentStartTwipOrigin": "direct",
+        "indentFirstLineTwip": 708,
+        "indentFirstLineTwipOrigin": "direct"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0015": {
+      "p_format": {
+        "indentStartTwip": 4248,
+        "indentStartTwipOrigin": "direct"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 24
+      }
+    },
+    "s0016": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 22,
+        "bold": true,
+        "italic": true
+      }
+    },
+    "s0017": {
+      "p_format": {},
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 22
+      }
+    },
+    "s0018": {
+      "p_format": {
+        "alignment": "CENTER"
+      },
+      "r_format": {
+        "rFonts": {
+          "ascii": "Times New Roman",
+          "hAnsi": "Times New Roman",
+          "eastAsia": "SimSun;宋体",
+          "cs": "Times New Roman"
+        },
+        "lang": {
+          "eastAsia": "zh-CN"
+        },
+        "font_size_half_points": 22
+      }
+    }
+  },
+  "content": [
+    {
+      "style_id": "s0001",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Перевод с казахского языка на русский язык",
+          "diff": {
+            "italic": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0002",
+      "runs": []
+    },
+    {
+      "style_id": "s0003",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Филиал Некоммерческого акционерного общества «Государственная корпорация «Правительство для граждан» по городу Алматы ",
+          "diff": {
+            "font_size_half_points": 22
+          },
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0004",
+      "runs": [
+        {
+          "type": "text",
+          "text": "050008, город Алматы, проспект Абая, 111,",
+          "diff": {
+            "font_size_half_points": 22
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0003",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Тел.: 8 (727) 269 95 88 приемная,",
+          "diff": {
+            "font_size_half_points": 22
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0004",
+      "runs": [
+        {
+          "type": "text",
+          "text": "e-mail: Almaty_kensenao@gov4c.kz",
+          "diff": {
+            "font_size_half_points": 22,
+            "lang": {
+              "val": "en-US"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0005",
+      "runs": []
+    },
+    {
+      "style_id": "s0001",
+      "runs": [
+        {
+          "type": "text",
+          "text": "ПО МЕСТУ ТРЕБОВАНИЯ",
+          "diff": {
+            "bold": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0006",
+      "runs": []
+    },
+    {
+      "style_id": "s0007",
+      "runs": [
+        {
+          "type": "text",
+          "text": "СПРАВКА О РОЖДЕНИИ № ",
+          "diff": {
+            "bold": true
+          },
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "3891 от 04.11.2025 г.",
+          "diff": {
+            "bold": true,
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0008",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "ИИН ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "  ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "950831400120",
+          "diff": {
+            "underline": "single"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Гражданин(-ка) ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "  ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "САНГУЛОВА ДАНА ДАРХАНКЫЗЫ",
+          "diff": {
+            "underline": "single"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0007",
+      "runs": [
+        {
+          "type": "text",
+          "text": "(фамилия, имя и отчество)",
+          "diff": {
+            "vertical_align": "superscript"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "родился(-лась)"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "31 числа 08 месяца 1995 года",
+          "diff": {
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0010",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "о чем в книге регистрации актов о рождении"
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "1995 года 11 месяца 14 числа",
+          "diff": {
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "произведена запись за № ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "1059",
+          "diff": {
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0010",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Родители:"
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Отец"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "БОЛЫСБАЕВ ДАРХАН ДОСЖАНОВИЧ",
+          "diff": {
+            "underline": "single",
+            "all_caps": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0007",
+      "runs": [
+        {
+          "type": "text",
+          "text": "(фамилия, имя и отчество)",
+          "diff": {
+            "vertical_align": "superscript"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Национальность"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "казах",
+          "diff": {
+            "underline": "single",
+            "all_caps": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Гражданство"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "diff": {
+            "underline": "single",
+            "all_caps": true
+          },
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0011",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Мать"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "САНГУЛОВА ГАУХАР КУДАЙБЕРДЫЕВНА",
+          "diff": {
+            "underline": "single",
+            "all_caps": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0007",
+      "runs": [
+        {
+          "type": "text",
+          "text": "(фамилия, имя и отчество)",
+          "diff": {
+            "vertical_align": "superscript"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Национальность"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "казаШКА",
+          "diff": {
+            "underline": "single",
+            "all_caps": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Гражданство"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "diff": {
+            "underline": "single",
+            "all_caps": true
+          },
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0012",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Место рождения"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "Город (селение): АЛМАТЫ Республика: КАЗАХСТАН",
+          "diff": {
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0012",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Выдано свидетельство о рождении:"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "04 числа 04 месяца 2012 года",
+          "diff": {
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0012",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Место государственной регистрации ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "Жетысуский районный отдел по РАГС филиала НАО «ГК «Правительство для граждан» по городу Алматы",
+          "diff": {
+            "underline": "single"
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0013",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Место выдачи ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "Ауэзовский районный отдел по РАГС филиала НАО «ГК «Правительство для граждан» по городу Алматы ",
+          "diff": {
+            "underline": "single"
+          },
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0013",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Примечание* Основание внесения изменения, дополнения, исправления в актовую запись, выдачи повторного свидетельства о рождении:",
+          "diff": {
+            "italic": true,
+            "underline": "single"
+          }
+        },
+        {
+          "type": "text",
+          "text": " На основании акт.записи о разводе №384 от 21.09.2005 г. изменена фамилия матери с «Болысбаева» на «Сангулова».",
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "На основании акт. записи о перемене ФИО №48 от 22.02.2012 г. изменена фамилия ребенка с «Болысбаева » на «Сангулова»,"
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "выдано повторное св-во №2163323 от 04.04.2012 г ."
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "И.о. руководителя регистрирующего органа"
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "СЕПЕТОВА С.О."
+        }
+      ]
+    },
+    {
+      "style_id": "s0014",
+      "runs": [
+        {
+          "type": "text",
+          "text": "   ",
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "text",
+          "text": "/подпись/",
+          "diff": {
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "   ",
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0015",
+      "runs": [
+        {
+          "type": "tab",
+          "meta": {
+            "leading": true
+          }
+        },
+        {
+          "type": "tab"
+        },
+        {
+          "type": "tab",
+          "diff": {
+            "font_size_half_points": 18
+          }
+        },
+        {
+          "type": "tab",
+          "diff": {
+            "font_size_half_points": 18
+          }
+        },
+        {
+          "type": "tab",
+          "diff": {
+            "font_size_half_points": 18
+          }
+        },
+        {
+          "type": "text",
+          "text": "   подпись",
+          "diff": {
+            "font_size_half_points": 18
+          },
+          "meta": {
+            "preserve": true
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "М.П."
+        }
+      ]
+    },
+    {
+      "style_id": "s0016",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Гербовая печать:",
+          "diff": {
+            "font_size_half_points": 22,
+            "bold": true,
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "diff": {
+            "font_size_half_points": 22,
+            "bold": true
+          },
+          "meta": {
+            "preserve": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "/Филиал Некоммерческого акционерного общества «Государственная корпорация «Правительство для граждан» по городу Алматы * Отдел регистрации актов гражданского состояния * БИН 180541001958/",
+          "diff": {
+            "font_size_half_points": 22
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0017",
+      "runs": []
+    },
+    {
+      "style_id": "s0017",
+      "runs": []
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Исп: Уласбек И.",
+          "diff": {
+            "font_size_half_points": 22
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0009",
+      "runs": [
+        {
+          "type": "text",
+          "text": "Тел: 8 (727) 2580202 внут: 34088",
+          "diff": {
+            "font_size_half_points": 22
+          }
+        }
+      ]
+    },
+    {
+      "style_id": "s0018",
+      "runs": []
+    }
+  ]
+}
