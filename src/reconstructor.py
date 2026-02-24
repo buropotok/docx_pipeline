@@ -165,6 +165,9 @@ class UltimateReconstructorV10:
         package_files["word/_rels/document.xml.rels"] = self._serialize_xml(doc_rels, standalone=True)
         package_files["[Content_Types].xml"] = self._serialize_xml(content_types, standalone=True)
 
+        raw_reconstructed_dir = os.path.join(os.path.dirname(self.raw_json_path), "raw", "reconstructed")
+        self._dump_reconstructed_parts(package_files, raw_reconstructed_dir)
+
         # Write docx (zip)
         os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
         with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -639,6 +642,7 @@ class UltimateReconstructorV10:
                 _set_w_attr(mlt_el, "val", multi_level_type)
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
+            seen_ilvls = set()
             # levels keys are strings of ints
             for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                 lvl_rec = levels[ilvl_str] or {}
@@ -664,9 +668,22 @@ class UltimateReconstructorV10:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
 
+                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
+                if "start" in lvl_rec:
+                    sv = _safe_int(lvl_rec.get("start"))
+                    if sv is not None:
+                        start = _w_sub(lvl_el, "start")
+                        _set_w_attr(start, "val", sv)
+
+                fmt = lvl_rec.get("format")
+                if not isinstance(fmt, str):
+                    continue
                 numFmt = _w_sub(lvl_el, "numFmt")
                 _set_w_attr(numFmt, "val", fmt)
 
+                template = lvl_rec.get("template")
+                if not isinstance(template, str):
+                    continue
                 lvlText = _w_sub(lvl_el, "lvlText")
                 _set_w_attr(lvlText, "val", template)
 
