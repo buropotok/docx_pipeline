@@ -189,6 +189,7 @@ class UltimateReconstructorV10:
         for p_item in self.content:
             p = _w_sub(body, "p")
             style_id = p_item.get("style_id")
+            source_word_style_id = p_item.get("source_word_style_id")
             runs = p_item.get("runs", [])
             if style_id is None:
                 style_id = ""
@@ -215,6 +216,13 @@ class UltimateReconstructorV10:
             pPr = self._build_pPr(p_format_for_emit)
             if pPr is not None:
                 p.append(pPr)
+
+            # Emit paragraph style reference (Stage 2): allows Word to apply style-linked numbering formatting.
+            if isinstance(source_word_style_id, str) and source_word_style_id:
+                if pPr is None:
+                    pPr = _w_sub(p, "pPr")
+                pStyle_el = _w_sub(pPr, "pStyle")
+                _set_w_attr(pStyle_el, "val", source_word_style_id)
 
             # runs
             if not runs:
@@ -617,7 +625,75 @@ class UltimateReconstructorV10:
                     if rPr is not None:
                         st.append(rPr)
 
+        # Stage 2: synthesize donor-source paragraph styles (by content[].source_word_style_id)
+        # Deterministic representative pick: most frequent style_id in content for each source_word_style_id;
+        # tie-break: smallest style_id.
+        src_map = self._collect_source_word_styles()
+        for src_style_id in sorted(src_map.keys()):
+            rep_style_id = src_map[src_style_id]
+            rep = self.styles.get(rep_style_id, {})
+            if not isinstance(rep, dict):
+                continue
+            p_fmt = rep.get("p_format", {}) or {}
+            r_fmt = rep.get("r_format", {}) or {}
+
+            st_src = _w_sub(styles, "style", attrib={
+                f"{{{W_NS}}}type": "paragraph",
+                f"{{{W_NS}}}styleId": str(src_style_id),
+            })
+            nm = _w_sub(st_src, "name")
+            _set_w_attr(nm, "val", str(src_style_id))
+
+            # Do NOT embed numbering in style definitions.
+            if isinstance(p_fmt, dict) and p_fmt:
+                p_fmt2 = dict(p_fmt)
+                p_fmt2.pop("numbering", None)
+                # also drop indent origin helpers if present
+                for k in (
+                    "indentStartTwipOrigin",
+                    "indentEndTwipOrigin",
+                    "indentFirstLineTwipOrigin",
+                    "indentHangingTwipOrigin",
+                ):
+                    p_fmt2.pop(k, None)
+                ppr = self._build_pPr(p_fmt2)
+                if ppr is not None:
+                    st_src.append(ppr)
+
+            if isinstance(r_fmt, dict) and r_fmt:
+                rpr = self._build_rPr(r_fmt)
+                if rpr is not None:
+                    st_src.append(rpr)
+
         return styles
+
+    def _collect_source_word_styles(self) -> Dict[str, str]:
+        """
+        Build mapping: source_word_style_id -> representative internal style_id.
+        Representative is chosen deterministically:
+          - most frequent internal style_id among content items with that source_word_style_id
+          - tie-break by smallest style_id
+        Excludes empty ids and "Normal".
+        """
+        counts: Dict[str, Dict[str, int]] = {}
+        for p in self.content:
+            src = p.get("source_word_style_id")
+            sid = p.get("style_id")
+            if not isinstance(src, str) or not src:
+                continue
+            if src == "Normal":
+                continue
+            if not isinstance(sid, str) or not sid:
+                continue
+            bucket = counts.setdefault(src, {})
+            bucket[sid] = bucket.get(sid, 0) + 1
+
+        out: Dict[str, str] = {}
+        for src, bucket in counts.items():
+            best_count = max(bucket.values())
+            best_ids = sorted([sid for sid, c in bucket.items() if c == best_count])
+            out[src] = best_ids[0]
+        return out
 
     # =========================
     # BUILD: numbering.xml
