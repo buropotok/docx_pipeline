@@ -135,6 +135,19 @@ Parser MUST set `meta.default_style_id` to the internal RAW style_id that corres
 The mapping MUST be based on effective formatting (docDefaults + style chain + that style's own pPr/rPr), then registered through the RAW styles library.
 This field does not bind content style_id values to Word `styleId`; it only selects the RAW base style used for generating Word Normal style.
 
+<<<<<<< codex/analyze-docx_pipeline-repository-nsq2hl
+RULE-P-STYLE-META-001 — Style Materialization Metadata (Stage 1)
+RAW styles library entries MAY include the following OPTIONAL metadata fields:
+  - styles[style_id].title: user-friendly name (e.g. "Обычный", "Стиль 1", ...)
+  - styles[style_id].word_style_id: planned Word w:styleId for future styles.xml materialization (e.g. "TF_s0001")
+  - styles[style_id].source_word_style_id: informational donor Word paragraph styleId observed while parsing (e.g. "Heading1")
+Additionally, content items MAY include:
+  - content[].source_word_style_id: donor Word paragraph styleId for that paragraph.
+These fields MUST be assigned deterministically (no guessing) and MUST NOT affect formatting de-duplication (style identity remains based on p_format+r_format only).
+UltimateReconstructorV11 may ignore these fields until the dedicated styles.xml materialization stage is implemented.
+
+=======
+>>>>>>> main
 RULE-P-008 — Numbering Level Geometry (lvl pPr subset)
 If numbering.xml level contains:
   <w:lvl ...><w:pPr>...</w:pPr></w:lvl>
@@ -208,6 +221,7 @@ RULE-R-OVERRIDE-NYI — Paragraph Overrides Not Yet Implemented
 content[].p_override is reserved by schema.
 UltimateReconstructorV11 does not apply p_override in this version.
 Therefore, for deterministic reconstruction with V11, producers SHOULD omit p_override or keep it empty.
+<<<<<<< codex/analyze-docx_pipeline-repository-nsq2hl
 
 RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v42 + Reconstructor v11)
 Parsed + reconstructed (end-to-end):
@@ -217,6 +231,17 @@ Parsed only (not reconstructed):
 Unsupported in current scope:
 - run token content outside schema-defined run.type set
 
+=======
+
+RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v42 + Reconstructor v11)
+Parsed + reconstructed (end-to-end):
+- text, tab, break, cr, sym
+Parsed only (not reconstructed):
+- softHyphen, noBreakHyphen
+Unsupported in current scope:
+- run token content outside schema-defined run.type set
+
+>>>>>>> main
 RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V11
 Run types allowed by schema but ignored by UltimateReconstructorV11:
 - softHyphen, noBreakHyphen

@@ -451,7 +451,20 @@
         "required": ["p_format", "r_format"],
         "properties": {
           "p_format": { "$ref": "#/$defs/pFormat" },
-          "r_format": { "$ref": "#/$defs/rFormat" }
+          "r_format": { "$ref": "#/$defs/rFormat" },
+
+          "title": {
+            "type": "string",
+            "description": "User-friendly имя стиля (например: \"Обычный\", \"Стиль 1\", \"Стиль 2\")."
+          },
+          "word_style_id": {
+            "type": "string",
+            "description": "Планируемый w:styleId для materialization в styles.xml (например: \"TF_s0001\")."
+          },
+          "source_word_style_id": {
+            "type": "string",
+            "description": "Исходный Word paragraph styleId, наблюденный в доноре (например: \"Heading1\"). Информативно; не гарантируется уникальность."
+          }
         }
       }
     },
@@ -464,6 +477,11 @@
         "required": ["style_id", "runs"],
         "properties": {
           "style_id": { "type": "string" },
+
+          "source_word_style_id": {
+            "type": "string",
+            "description": "Word paragraph styleId для данного абзаца (например: \"Normal\", \"Heading1\"). Нужен для последующей materialization/переноса heading styles."
+          },
 
           "p_override": {
             "$ref": "#/$defs/pFormat",

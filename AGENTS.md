@@ -69,6 +69,8 @@ Zero values (0) MUST NOT be dropped.
 
 Use explicit `is not None` checks.
 
+Note: deterministic style metadata (e.g., styles[].title / styles[].word_style_id / styles[].source_word_style_id and content[].source_word_style_id) is permitted as IR enrichment for future styles.xml materialization. It must not change formatting semantics and must not be based on guesses.
+
 ---
 
 ### 4.2 No Destructive Refactoring

@@ -243,8 +243,9 @@ class UltimateParserV41:
             if default_word_style_id is not None:
                 default_p_format = self._effective_p_format(default_word_style_id, None)
                 default_r_format = self._effective_r_format(default_word_style_id)
-                default_style_id = self._register_out_style(default_p_format, default_r_format)
+                default_style_id = self._register_out_style(default_p_format, default_r_format, source_word_style_id=default_word_style_id)
                 result["meta"]["default_style_id"] = default_style_id
+            self._finalize_out_style_metadata(result["meta"].get("default_style_id"))
             result["styles"] = self.out_styles
             print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
             return json.dumps(result, ensure_ascii=False, indent=2)
@@ -272,19 +273,21 @@ class UltimateParserV41:
             else:
                 base_r_for_style = _merge(style_r_format, para_mark_rPr)
 
-            style_id = self._register_out_style(base_p_format, base_r_for_style)
+            style_id = self._register_out_style(base_p_format, base_r_for_style, source_word_style_id=p_style_id)
 
-            result["content"].append({
-                "style_id": style_id,
-                "runs": runs
-            })
+            item: Dict[str, Any] = {"style_id": style_id, "runs": runs}
+            if p_style_id is not None:
+                item["source_word_style_id"] = p_style_id
+            result["content"].append(item)
 
         if default_word_style_id is not None:
             default_p_format = self._effective_p_format(default_word_style_id, None)
             default_r_format = self._effective_r_format(default_word_style_id)
-            default_style_id = self._register_out_style(default_p_format, default_r_format)
+            default_style_id = self._register_out_style(default_p_format, default_r_format, source_word_style_id=default_word_style_id)
             result["meta"]["default_style_id"] = default_style_id
 
+        # Finalize style materialization metadata (titles/word ids) deterministically (Stage 1; reconstructor may ignore).
+        self._finalize_out_style_metadata(result["meta"].get("default_style_id"))
         result["styles"] = self.out_styles
         print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
         return json.dumps(result, ensure_ascii=False, indent=2)
@@ -449,21 +452,64 @@ class UltimateParserV41:
     # OUTPUT STYLE LIBRARY (schema.styles)
     # =========================
 
-    def _register_out_style(self, p_format: Dict[str, Any], r_format: Dict[str, Any]) -> str:
-        style_obj = {
-            "p_format": p_format or {},
-            "r_format": r_format or {},
-        }
+    def _register_out_style(
+        self,
+        p_format: Dict[str, Any],
+        r_format: Dict[str, Any],
+        source_word_style_id: Optional[str] = None
+    ) -> str:
+        style_obj = {"p_format": p_format or {}, "r_format": r_format or {}}
+
+        # IMPORTANT: de-dup key must remain based ONLY on formatting (no metadata).
         key = _stable_json_key(style_obj)
         existing = self._style_key_to_id.get(key)
         if existing:
+            if source_word_style_id is not None:
+                cur = self.out_styles.get(existing, {})
+                # keep first seen for determinism; do not override
+                if isinstance(cur, dict) and cur.get("source_word_style_id") is None:
+                    cur["source_word_style_id"] = source_word_style_id
             return existing
 
         style_id = f"s{self._style_counter:04d}"
         self._style_counter += 1
         self._style_key_to_id[key] = style_id
+        if source_word_style_id is not None:
+            style_obj["source_word_style_id"] = source_word_style_id
         self.out_styles[style_id] = style_obj
         return style_id
+
+    def _finalize_out_style_metadata(self, default_style_id: Optional[str]) -> None:
+        """
+        Stage 1: assign deterministic user-friendly titles and planned Word style ids.
+        - default style: title="Обычный"
+        - others: "Стиль 1", "Стиль 2", ... in style_id order (excluding default)
+        - word_style_id: "TF_<style_id>"
+        """
+        style_ids = sorted(self.out_styles.keys())
+
+        # word_style_id for all styles
+        for sid in style_ids:
+            st = self.out_styles.get(sid)
+            if isinstance(st, dict) and st.get("word_style_id") is None:
+                st["word_style_id"] = f"TF_{sid}"
+
+        # titles
+        if default_style_id is not None and default_style_id in self.out_styles:
+            st0 = self.out_styles.get(default_style_id)
+            if isinstance(st0, dict):
+                st0["title"] = "Обычный"
+
+        n = 1
+        for sid in style_ids:
+            if sid == default_style_id:
+                continue
+            st = self.out_styles.get(sid)
+            if not isinstance(st, dict):
+                continue
+            if st.get("title") is None:
+                st["title"] = f"Стиль {n}"
+                n += 1
 
     # =========================
     # DOCUMENT INFO
