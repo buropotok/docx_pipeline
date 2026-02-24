@@ -145,7 +145,6 @@ Additionally, content items MAY include:
 These fields MUST be assigned deterministically (no guessing) and MUST NOT affect formatting de-duplication (style identity remains based on p_format+r_format only).
 UltimateReconstructorV11 may ignore these fields until the dedicated styles.xml materialization stage is implemented.
 
-
 RULE-P-008 — Numbering Level Geometry (lvl pPr subset)
 If numbering.xml level contains:
   <w:lvl ...><w:pPr>...</w:pPr></w:lvl>
@@ -219,15 +218,6 @@ RULE-R-OVERRIDE-NYI — Paragraph Overrides Not Yet Implemented
 content[].p_override is reserved by schema.
 UltimateReconstructorV11 does not apply p_override in this version.
 Therefore, for deterministic reconstruction with V11, producers SHOULD omit p_override or keep it empty.
-
-RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v42 + Reconstructor v11)
-Parsed + reconstructed (end-to-end):
-- text, tab, break, cr, sym
-Parsed only (not reconstructed):
-- softHyphen, noBreakHyphen
-Unsupported in current scope:
-- run token content outside schema-defined run.type set
-
 
 RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v42 + Reconstructor v11)
 Parsed + reconstructed (end-to-end):

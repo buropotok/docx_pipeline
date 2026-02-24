@@ -644,26 +644,12 @@ class UltimateReconstructorV10:
             nm = _w_sub(st_src, "name")
             _set_w_attr(nm, "val", str(src_style_id))
 
-            # Do NOT embed numbering in style definitions.
-            if isinstance(p_fmt, dict) and p_fmt:
-                p_fmt2 = dict(p_fmt)
-                p_fmt2.pop("numbering", None)
-                # also drop indent origin helpers if present
-                for k in (
-                    "indentStartTwipOrigin",
-                    "indentEndTwipOrigin",
-                    "indentFirstLineTwipOrigin",
-                    "indentHangingTwipOrigin",
-                ):
-                    p_fmt2.pop(k, None)
-                ppr = self._build_pPr(p_fmt2)
-                if ppr is not None:
-                    st_src.append(ppr)
-
-            if isinstance(r_fmt, dict) and r_fmt:
-                rpr = self._build_rPr(r_fmt)
-                if rpr is not None:
-                    st_src.append(rpr)
+            ppr = self._build_pPr(p_fmt)
+            if ppr is not None:
+                st_src.append(ppr)
+            rpr = self._build_rPr(r_fmt)
+            if rpr is not None:
+                st_src.append(rpr)
 
         return styles
 
