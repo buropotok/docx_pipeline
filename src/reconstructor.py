@@ -254,10 +254,10 @@ class UltimateReconstructorV10:
                     continue
 
                 r = _w_sub(p, "r")
+                # Stage transition: for non-empty paragraphs, style r_format is the base.
+                # Emit only explicit run-local diff into w:rPr (no synthesized base fields).
                 diff = run.get("diff", {}) or {}
-                effective_r = self._merge_formats(base_r, diff)
-
-                rPr = self._build_rPr(effective_r)
+                rPr = self._build_rPr(diff)
                 if rPr is not None:
                     r.append(rPr)
 
@@ -617,8 +617,6 @@ class UltimateReconstructorV10:
         })
         name = _w_sub(st, "name")
         _set_w_attr(name, "val", "Normal")
-
-        self.emitted_paragraph_style_ids = {"Normal"}
 
         if use_default_style_id:
             normal_style = self.styles.get(self.default_style_id, {})
