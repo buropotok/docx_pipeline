@@ -643,16 +643,25 @@ class UltimateReconstructorV10:
             rep = self.styles.get(rep_style_id, {})
             if not isinstance(rep, dict):
                 continue
-            p_fmt = rep.get("p_format", {}) or {}
-            r_fmt = rep.get("r_format", {}) or {}
+
+            p_fmt_raw = rec.get("p_format", {}) or {}
+            r_fmt_raw = rec.get("r_format", {}) or {}
+            p_fmt = self._merge_formats(normal_p, p_fmt_raw)
+            r_fmt = self._merge_formats(normal_r, r_fmt_raw)
+
+            # Do not synthesize style-level numbering; numbering is emitted from paragraph RAW.
+            p_fmt.pop("numbering", None)
 
             st_src = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": str(src_style_id),
+                f"{{{W_NS}}}styleId": str(style_xml_id),
             })
             self.emitted_paragraph_style_ids.add(str(src_style_id))
             nm = _w_sub(st_src, "name")
-            _set_w_attr(nm, "val", str(src_style_id))
+            if isinstance(title, str) and title:
+                _set_w_attr(nm, "val", title)
+            else:
+                _set_w_attr(nm, "val", str(style_xml_id))
 
             ppr = self._build_pPr(p_fmt)
             if ppr is not None:
