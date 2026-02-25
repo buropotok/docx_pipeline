@@ -165,6 +165,9 @@ class UltimateReconstructorV10:
         package_files["word/_rels/document.xml.rels"] = self._serialize_xml(doc_rels, standalone=True)
         package_files["[Content_Types].xml"] = self._serialize_xml(content_types, standalone=True)
 
+        raw_reconstructed_dir = os.path.join(os.path.dirname(self.raw_json_path), "raw", "reconstructed")
+        self._dump_reconstructed_parts(package_files, raw_reconstructed_dir)
+
         # Write docx (zip)
         os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
         with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -301,6 +304,15 @@ class UltimateReconstructorV10:
             return None
 
         pPr = _w_el("pPr")
+        # If paragraph has numbering (numPr), do NOT emit paragraph-level indents.
+        # Otherwise <w:pPr>/<w:ind> can override level indents from numbering.xml in Word.
+        num = p_format.get("numbering")
+        has_numpr = (
+                    isinstance(num, dict)
+         and (num.get("numId") is not None)
+         and (num.get("ilvl") is not None)
+         and (_safe_int(num.get("ilvl")) is not None)
+        )
 
         # alignment
         align = p_format.get("alignment")
@@ -599,6 +611,7 @@ class UltimateReconstructorV10:
         name = _w_sub(st, "name")
         _set_w_attr(name, "val", "Normal")
 
+<<<<<<< codex/analyze-docx_pipeline-repository-2wjypb
         # Apply "Normal" formatting (font size 12 pt, Times New Roman, regular)
         p_format = {
             "alignment": "LEFT",
@@ -627,6 +640,8 @@ class UltimateReconstructorV10:
         if rpr_normal is not None:
             st.append(rpr_normal)
 
+=======
+>>>>>>> main
         if use_default_style_id:
             normal_style = self.styles.get(self.default_style_id, {})
             if isinstance(normal_style, dict):
@@ -641,6 +656,7 @@ class UltimateReconstructorV10:
                     if rPr is not None:
                         st.append(rPr)
 
+<<<<<<< codex/analyze-docx_pipeline-repository-2wjypb
         # Create Heading Styles (Heading 1, Heading 2, ...) with paragraph and font settings
         heading_styles = {
             "Heading 1": {"font_size": 32, "bold": True, "numId": "1", "ilvl": "0", "indent": 0},
@@ -717,6 +733,8 @@ class UltimateReconstructorV10:
             if rpr is not None:
                 user_style.append(rpr)
 
+=======
+>>>>>>> main
         # Stage 3: materialize all unique paragraph styles for each `source_word_style_id`
         # Deterministic representative pick: most frequent style_id in content for each source_word_style_id;
         # tie-break: smallest style_id.
@@ -747,8 +765,16 @@ class UltimateReconstructorV10:
 
     def _collect_source_word_styles(self) -> Dict[str, str]:
         """
+<<<<<<< codex/analyze-docx_pipeline-repository-2wjypb
         Collect all unique source_word_style_ids and return the most frequent style.
         Ensure we assign Heading styles (Heading 1, Heading 2) based on numbering definitions.
+=======
+        Build mapping: source_word_style_id -> representative internal style_id.
+        Representative is chosen deterministically:
+          - most frequent internal style_id among content items with that source_word_style_id
+          - tie-break by smallest style_id
+        Excludes empty ids and "Normal".
+>>>>>>> main
         """
         counts: Dict[str, Dict[str, int]] = {}
         for p in self.content:
@@ -802,6 +828,7 @@ class UltimateReconstructorV10:
                 _set_w_attr(mlt_el, "val", multi_level_type)
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
+            seen_ilvls = set()
             # levels keys are strings of ints
             for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                 lvl_rec = levels[ilvl_str] or {}
@@ -821,9 +848,15 @@ class UltimateReconstructorV10:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
 
+                fmt = lvl_rec.get("format")
+                if not isinstance(fmt, str):
+                    continue
                 numFmt = _w_sub(lvl_el, "numFmt")
                 _set_w_attr(numFmt, "val", fmt)
 
+                template = lvl_rec.get("template")
+                if not isinstance(template, str):
+                    continue
                 lvlText = _w_sub(lvl_el, "lvlText")
                 _set_w_attr(lvlText, "val", template)
 
