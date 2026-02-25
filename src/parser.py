@@ -138,6 +138,17 @@ def _dict_diff(base: Dict[str, Any], cur: Dict[str, Any]) -> Dict[str, Any]:
     return diff
 
 
+def _run_local_r_diff(base_r: Dict[str, Any], run_r: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Stage transition helper for token model (text/tab/break/cr/sym):
+    keep tokens unchanged, but keep run-local rPr as a minimal diff
+    against styles[style_id].r_format.
+    """
+    if not run_r:
+        return {}
+    return _dict_diff(base_r, run_r)
+
+
 def _sym_encode(font: str, char: str) -> str:
     """
     Stable minimal encoding for w:sym compatible with current schema (text field only).
@@ -1024,7 +1035,7 @@ class UltimateParserV41:
 
             rPr = child.find(qn("w:rPr"))
             r_cur = self._parse_rPr(rPr)
-            r_diff = _dict_diff(base_r_for_diff, r_cur) if r_cur else {}
+            r_diff = _run_local_r_diff(base_r_for_diff, r_cur)
 
             for node in child:
                 if node.tag == qn("w:rPr"):
