@@ -117,6 +117,7 @@ class UltimateReconstructorV10:
         self.numbering_definitions: Dict[str, Any] = self.data["numbering_definitions"] or {}
         self.styles: Dict[str, Any] = self.data["styles"] or {}
         self.content: List[Dict[str, Any]] = self.data["content"] or []
+        self.emitted_paragraph_style_ids: set[str] = set()
 
         self.default_style_id: Optional[str] = None
         default_style_id = self.meta.get("default_style_id")
@@ -144,8 +145,8 @@ class UltimateReconstructorV10:
         package_files: Dict[str, bytes] = {}
 
         # XML parts
-        document_xml = self._build_document_xml()
         styles_xml = self._build_styles_xml()
+        document_xml = self._build_document_xml()
         numbering_xml = self._build_numbering_xml()
 
         settings_xml = self._build_settings_xml()
@@ -217,12 +218,18 @@ class UltimateReconstructorV10:
             if pPr is not None:
                 p.append(pPr)
 
-            # Emit paragraph style reference (Stage 2): allows Word to apply style-linked numbering formatting.
-            if isinstance(source_word_style_id, str) and source_word_style_id:
+            # Emit paragraph style reference only for styles materialized in styles.xml.
+            style_ref_to_emit: Optional[str] = None
+            if isinstance(source_word_style_id, str) and source_word_style_id in self.emitted_paragraph_style_ids:
+                style_ref_to_emit = source_word_style_id
+            elif "Normal" in self.emitted_paragraph_style_ids:
+                style_ref_to_emit = "Normal"
+
+            if style_ref_to_emit is not None:
                 if pPr is None:
                     pPr = _w_sub(p, "pPr")
                 pStyle_el = _w_sub(pPr, "pStyle")
-                _set_w_attr(pStyle_el, "val", source_word_style_id)
+                _set_w_attr(pStyle_el, "val", style_ref_to_emit)
 
             # runs
             if not runs:
@@ -634,15 +641,25 @@ class UltimateReconstructorV10:
             rep = self.styles.get(rep_style_id, {})
             if not isinstance(rep, dict):
                 continue
-            p_fmt = rep.get("p_format", {}) or {}
-            r_fmt = rep.get("r_format", {}) or {}
+
+            p_fmt_raw = rec.get("p_format", {}) or {}
+            r_fmt_raw = rec.get("r_format", {}) or {}
+            p_fmt = self._merge_formats(normal_p, p_fmt_raw)
+            r_fmt = self._merge_formats(normal_r, r_fmt_raw)
+
+            # Do not synthesize style-level numbering; numbering is emitted from paragraph RAW.
+            p_fmt.pop("numbering", None)
 
             st_src = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": str(src_style_id),
+                f"{{{W_NS}}}styleId": str(style_xml_id),
             })
+            self.emitted_paragraph_style_ids.add(str(src_style_id))
             nm = _w_sub(st_src, "name")
-            _set_w_attr(nm, "val", str(src_style_id))
+            if isinstance(title, str) and title:
+                _set_w_attr(nm, "val", title)
+            else:
+                _set_w_attr(nm, "val", str(style_xml_id))
 
             ppr = self._build_pPr(p_fmt)
             if ppr is not None:
