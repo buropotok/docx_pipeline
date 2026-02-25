@@ -625,7 +625,7 @@ class UltimateReconstructorV10:
                     if rPr is not None:
                         st.append(rPr)
 
-        # Stage 2: synthesize donor-source paragraph styles (by content[].source_word_style_id)
+        # Stage 3: materialize all unique paragraph styles for each `source_word_style_id`
         # Deterministic representative pick: most frequent style_id in content for each source_word_style_id;
         # tie-break: smallest style_id.
         src_map = self._collect_source_word_styles()
