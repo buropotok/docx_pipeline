@@ -145,8 +145,8 @@ class UltimateReconstructorV10:
         package_files: Dict[str, bytes] = {}
 
         # XML parts
-        document_xml = self._build_document_xml()
         styles_xml = self._build_styles_xml()
+        document_xml = self._build_document_xml()
         numbering_xml = self._build_numbering_xml()
 
         settings_xml = self._build_settings_xml()
@@ -218,12 +218,18 @@ class UltimateReconstructorV10:
             if pPr is not None:
                 p.append(pPr)
 
-            # Emit paragraph style reference (Stage 2): allows Word to apply style-linked numbering formatting.
-            if isinstance(source_word_style_id, str) and source_word_style_id:
+            # Emit paragraph style reference only for styles materialized in styles.xml.
+            style_ref_to_emit: Optional[str] = None
+            if isinstance(source_word_style_id, str) and source_word_style_id in self.emitted_paragraph_style_ids:
+                style_ref_to_emit = source_word_style_id
+            elif "Normal" in self.emitted_paragraph_style_ids:
+                style_ref_to_emit = "Normal"
+
+            if style_ref_to_emit is not None:
                 if pPr is None:
                     pPr = _w_sub(p, "pPr")
                 pStyle_el = _w_sub(pPr, "pStyle")
-                _set_w_attr(pStyle_el, "val", source_word_style_id)
+                _set_w_attr(pStyle_el, "val", style_ref_to_emit)
 
             # runs
             if not runs:
@@ -654,7 +660,7 @@ class UltimateReconstructorV10:
             # ✅ Исправлено: используем src_style_id как styleId
             st_src = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": str(src_style_id),
+                f"{{{W_NS}}}styleId": str(style_xml_id),
             })
             self.emitted_paragraph_style_ids.add(str(src_style_id))
 
