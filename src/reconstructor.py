@@ -117,6 +117,7 @@ class UltimateReconstructorV10:
         self.numbering_definitions: Dict[str, Any] = self.data["numbering_definitions"] or {}
         self.styles: Dict[str, Any] = self.data["styles"] or {}
         self.content: List[Dict[str, Any]] = self.data["content"] or []
+        self.emitted_paragraph_style_ids: set[str] = set()
 
         self.default_style_id: Optional[str] = None
         default_style_id = self.meta.get("default_style_id")
@@ -144,8 +145,8 @@ class UltimateReconstructorV10:
         package_files: Dict[str, bytes] = {}
 
         # XML parts
-        document_xml = self._build_document_xml()
         styles_xml = self._build_styles_xml()
+        document_xml = self._build_document_xml()
         numbering_xml = self._build_numbering_xml()
 
         settings_xml = self._build_settings_xml()
@@ -217,12 +218,18 @@ class UltimateReconstructorV10:
             if pPr is not None:
                 p.append(pPr)
 
-            # Emit paragraph style reference (Stage 2): allows Word to apply style-linked numbering formatting.
-            if isinstance(source_word_style_id, str) and source_word_style_id:
+            # Emit paragraph style reference only for styles materialized in styles.xml.
+            style_ref_to_emit: Optional[str] = None
+            if isinstance(source_word_style_id, str) and source_word_style_id in self.emitted_paragraph_style_ids:
+                style_ref_to_emit = source_word_style_id
+            elif "Normal" in self.emitted_paragraph_style_ids:
+                style_ref_to_emit = "Normal"
+
+            if style_ref_to_emit is not None:
                 if pPr is None:
                     pPr = _w_sub(p, "pPr")
                 pStyle_el = _w_sub(pPr, "pStyle")
-                _set_w_attr(pStyle_el, "val", source_word_style_id)
+                _set_w_attr(pStyle_el, "val", style_ref_to_emit)
 
             # runs
             if not runs:
@@ -611,6 +618,8 @@ class UltimateReconstructorV10:
         name = _w_sub(st, "name")
         _set_w_attr(name, "val", "Normal")
 
+        self.emitted_paragraph_style_ids = {"Normal"}
+
         if use_default_style_id:
             normal_style = self.styles.get(self.default_style_id, {})
             if isinstance(normal_style, dict):
@@ -625,31 +634,14 @@ class UltimateReconstructorV10:
                     if rPr is not None:
                         st.append(rPr)
 
-        # Materialize paragraph styles from RAW only.
-        normal_p: Dict[str, Any] = {}
-        normal_r: Dict[str, Any] = {}
-        if use_default_style_id:
-            normal_style = self.styles.get(self.default_style_id, {})
-            if isinstance(normal_style, dict):
-                normal_p = normal_style.get("p_format", {}) or {}
-                normal_r = normal_style.get("r_format", {}) or {}
-
-        for style_id in sorted(self.styles.keys()):
-            rec = self.styles.get(style_id, {})
-            if not isinstance(rec, dict):
-                continue
-
-            word_style_id = rec.get("word_style_id")
-            source_word_style_id = rec.get("source_word_style_id")
-            style_xml_id = None
-            if isinstance(word_style_id, str) and word_style_id:
-                style_xml_id = word_style_id
-            elif isinstance(source_word_style_id, str) and source_word_style_id and source_word_style_id != "Normal":
-                style_xml_id = source_word_style_id
-            elif isinstance(style_id, str) and style_id and style_id != "Normal":
-                style_xml_id = style_id
-
-            if not style_xml_id or style_xml_id == "Normal":
+        # Stage 3: materialize all unique paragraph styles for each `source_word_style_id`
+        # Deterministic representative pick: most frequent style_id in content for each source_word_style_id;
+        # tie-break: smallest style_id.
+        src_map = self._collect_source_word_styles()
+        for src_style_id in sorted(src_map.keys()):
+            rep_style_id = src_map[src_style_id]
+            rep = self.styles.get(rep_style_id, {})
+            if not isinstance(rep, dict):
                 continue
 
             p_fmt_raw = rec.get("p_format", {}) or {}
@@ -664,8 +656,7 @@ class UltimateReconstructorV10:
                 f"{{{W_NS}}}type": "paragraph",
                 f"{{{W_NS}}}styleId": str(style_xml_id),
             })
-
-            title = rec.get("title")
+            self.emitted_paragraph_style_ids.add(str(src_style_id))
             nm = _w_sub(st_src, "name")
             if isinstance(title, str) and title:
                 _set_w_attr(nm, "val", title)
