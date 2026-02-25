@@ -241,10 +241,10 @@ class UltimateReconstructorV10:
                         pPr = _w_sub(p, "pPr")
                     rPr_mark = self._build_rPr(base_r)
                     if rPr_mark is not None:
-                        # paragraph mark formatting is inside pPr/rPr
-                        # avoid duplicating if already exists
-                        _w_sub(pPr, "rPr")
-                        pPr.find(qn_w("rPr")).extend(list(rPr_mark))
+                        existing_rPr = pPr.find(qn_w("rPr"))
+                        if existing_rPr is None:
+                            existing_rPr = _w_sub(pPr, "rPr")
+                        existing_rPr.extend(list(rPr_mark))
                 continue
 
             for run in runs:
