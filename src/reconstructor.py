@@ -117,6 +117,7 @@ class UltimateReconstructorV10:
         self.numbering_definitions: Dict[str, Any] = self.data["numbering_definitions"] or {}
         self.styles: Dict[str, Any] = self.data["styles"] or {}
         self.content: List[Dict[str, Any]] = self.data["content"] or []
+        self.emitted_paragraph_style_ids: set[str] = set()
 
         self.default_style_id: Optional[str] = None
         default_style_id = self.meta.get("default_style_id")
@@ -247,10 +248,10 @@ class UltimateReconstructorV10:
                     continue
 
                 r = _w_sub(p, "r")
+                # Stage transition: for non-empty paragraphs, style r_format is the base.
+                # Emit only explicit run-local diff into w:rPr (no synthesized base fields).
                 diff = run.get("diff", {}) or {}
-                effective_r = self._merge_formats(base_r, diff)
-
-                rPr = self._build_rPr(effective_r)
+                rPr = self._build_rPr(diff)
                 if rPr is not None:
                     r.append(rPr)
 
@@ -611,37 +612,6 @@ class UltimateReconstructorV10:
         name = _w_sub(st, "name")
         _set_w_attr(name, "val", "Normal")
 
-<<<<<<< codex/analyze-docx_pipeline-repository-2wjypb
-        # Apply "Normal" formatting (font size 12 pt, Times New Roman, regular)
-        p_format = {
-            "alignment": "LEFT",
-            "indentStartTwip": 0,
-            "indentFirstLineTwip": 0,
-            "spaceBeforeTwip": 0,
-            "spaceAfterTwip": 0,
-            "lineRule": "auto",
-        }
-        r_format = {
-            "rFonts": {
-                "ascii": "Times New Roman",
-                "hAnsi": "Times New Roman",
-                "eastAsia": "SimSun;宋体",
-                "cs": "Times New Roman"
-            },
-            "font_size_half_points": 24,
-            "bold": False,
-            "italic": False,
-            "underline": "none"
-        }
-        ppr_normal = self._build_pPr(p_format)
-        if ppr_normal is not None:
-            st.append(ppr_normal)
-        rpr_normal = self._build_rPr(r_format)
-        if rpr_normal is not None:
-            st.append(rpr_normal)
-
-=======
->>>>>>> main
         if use_default_style_id:
             normal_style = self.styles.get(self.default_style_id, {})
             if isinstance(normal_style, dict):
@@ -656,85 +626,6 @@ class UltimateReconstructorV10:
                     if rPr is not None:
                         st.append(rPr)
 
-<<<<<<< codex/analyze-docx_pipeline-repository-2wjypb
-        # Create Heading Styles (Heading 1, Heading 2, ...) with paragraph and font settings
-        heading_styles = {
-            "Heading 1": {"font_size": 32, "bold": True, "numId": "1", "ilvl": "0", "indent": 0},
-            "Heading 2": {"font_size": 28, "bold": True, "numId": "1", "ilvl": "1", "indent": 720},
-            "Heading 3": {"font_size": 24, "bold": True, "numId": "1", "ilvl": "2", "indent": 1440},
-        }
-
-        for heading_name, heading_format in heading_styles.items():
-            heading_style = _w_sub(styles, "style", attrib={
-                f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": heading_name.replace(" ", ""),
-            })
-            name = _w_sub(heading_style, "name")
-            _set_w_attr(name, "val", heading_name)
-
-            p_format = {
-                "alignment": "LEFT",
-                "indentStartTwip": heading_format["indent"],
-                "spaceBeforeTwip": 240,
-                "spaceAfterTwip": 240,
-                "numbering": {"numId": heading_format["numId"], "ilvl": int(heading_format["ilvl"])},
-            }
-            r_format = {
-                "rFonts": {
-                    "ascii": "Times New Roman",
-                    "hAnsi": "Times New Roman",
-                    "eastAsia": "SimSun;宋体",
-                    "cs": "Times New Roman"
-                },
-                "font_size_half_points": heading_format["font_size"],
-                "bold": heading_format["bold"],
-                "italic": False,
-                "underline": "none"
-            }
-            ppr = self._build_pPr(p_format)
-            if ppr is not None:
-                heading_style.append(ppr)
-            rpr = self._build_rPr(r_format)
-            if rpr is not None:
-                heading_style.append(rpr)
-
-        # Create User-Defined Styles (e.g., Стиль 1, Стиль 2)
-        for idx in range(1, 21):
-            user_style_name = f"Стиль {idx}"
-            user_style = _w_sub(styles, "style", attrib={
-                f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": f"TF_s{idx:04d}",
-            })
-            name = _w_sub(user_style, "name")
-            _set_w_attr(name, "val", user_style_name)
-
-            p_format = {
-                "alignment": "LEFT",
-                "indentStartTwip": 0,
-                "spaceBeforeTwip": 0,
-                "spaceAfterTwip": 0,
-            }
-            r_format = {
-                "rFonts": {
-                    "ascii": "Times New Roman",
-                    "hAnsi": "Times New Roman",
-                    "eastAsia": "SimSun;宋体",
-                    "cs": "Times New Roman"
-                },
-                "font_size_half_points": 24,
-                "bold": False,
-                "italic": False,
-                "underline": "none"
-            }
-            ppr = self._build_pPr(p_format)
-            if ppr is not None:
-                user_style.append(ppr)
-            rpr = self._build_rPr(r_format)
-            if rpr is not None:
-                user_style.append(rpr)
-
-=======
->>>>>>> main
         # Stage 3: materialize all unique paragraph styles for each `source_word_style_id`
         # Deterministic representative pick: most frequent style_id in content for each source_word_style_id;
         # tie-break: smallest style_id.
@@ -744,15 +635,33 @@ class UltimateReconstructorV10:
             rep = self.styles.get(rep_style_id, {})
             if not isinstance(rep, dict):
                 continue
-            p_fmt = rep.get("p_format", {}) or {}
-            r_fmt = rep.get("r_format", {}) or {}
 
+            # ✅ Исправлено: используем rep вместо rec
+            p_fmt_raw = rep.get("p_format", {}) or {}
+            r_fmt_raw = rep.get("r_format", {}) or {}
+
+            # Получаем базовые форматы из Normal стиля
+            normal_style = self.styles.get("Normal", {})
+            normal_p = normal_style.get("p_format", {}) or {}
+            normal_r = normal_style.get("r_format", {}) or {}
+
+            p_fmt = self._merge_formats(normal_p, p_fmt_raw)
+            r_fmt = self._merge_formats(normal_r, r_fmt_raw)
+
+            # Do not synthesize style-level numbering
+            p_fmt.pop("numbering", None)
+
+            # ✅ Исправлено: используем src_style_id как styleId
             st_src = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
                 f"{{{W_NS}}}styleId": str(src_style_id),
             })
+            self.emitted_paragraph_style_ids.add(str(src_style_id))
+
             nm = _w_sub(st_src, "name")
-            _set_w_attr(nm, "val", str(src_style_id))
+            # ✅ Исправлено: используем имя из репрезентативного стиля
+            style_name = rep.get("name") or str(src_style_id)
+            _set_w_attr(nm, "val", style_name)
 
             ppr = self._build_pPr(p_fmt)
             if ppr is not None:
@@ -765,16 +674,11 @@ class UltimateReconstructorV10:
 
     def _collect_source_word_styles(self) -> Dict[str, str]:
         """
-<<<<<<< codex/analyze-docx_pipeline-repository-2wjypb
-        Collect all unique source_word_style_ids and return the most frequent style.
-        Ensure we assign Heading styles (Heading 1, Heading 2) based on numbering definitions.
-=======
         Build mapping: source_word_style_id -> representative internal style_id.
         Representative is chosen deterministically:
           - most frequent internal style_id among content items with that source_word_style_id
           - tie-break by smallest style_id
         Excludes empty ids and "Normal".
->>>>>>> main
         """
         counts: Dict[str, Dict[str, int]] = {}
         for p in self.content:
