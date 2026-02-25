@@ -642,24 +642,32 @@ class UltimateReconstructorV10:
             if not isinstance(rep, dict):
                 continue
 
-            p_fmt_raw = rec.get("p_format", {}) or {}
-            r_fmt_raw = rec.get("r_format", {}) or {}
+            # ✅ Исправлено: используем rep вместо rec
+            p_fmt_raw = rep.get("p_format", {}) or {}
+            r_fmt_raw = rep.get("r_format", {}) or {}
+
+            # Получаем базовые форматы из Normal стиля
+            normal_style = self.styles.get("Normal", {})
+            normal_p = normal_style.get("p_format", {}) or {}
+            normal_r = normal_style.get("r_format", {}) or {}
+
             p_fmt = self._merge_formats(normal_p, p_fmt_raw)
             r_fmt = self._merge_formats(normal_r, r_fmt_raw)
 
-            # Do not synthesize style-level numbering; numbering is emitted from paragraph RAW.
+            # Do not synthesize style-level numbering
             p_fmt.pop("numbering", None)
 
+            # ✅ Исправлено: используем src_style_id как styleId
             st_src = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
                 f"{{{W_NS}}}styleId": str(style_xml_id),
             })
             self.emitted_paragraph_style_ids.add(str(src_style_id))
+
             nm = _w_sub(st_src, "name")
-            if isinstance(title, str) and title:
-                _set_w_attr(nm, "val", title)
-            else:
-                _set_w_attr(nm, "val", str(style_xml_id))
+            # ✅ Исправлено: используем имя из репрезентативного стиля
+            style_name = rep.get("name") or str(src_style_id)
+            _set_w_attr(nm, "val", style_name)
 
             ppr = self._build_pPr(p_fmt)
             if ppr is not None:
