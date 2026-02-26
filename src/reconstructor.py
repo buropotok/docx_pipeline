@@ -1,10 +1,16 @@
-# UltimateReconstructorV11.py
-# Reconstructor Version: v11
-# Schema Version: 2.8.3
-# Rules Version: 0.2
+# UltimateReconstructorV12.py
+# Reconstructor Version: v12
+# Schema Version: 2.9
+# Rules Version: 0.3
 
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
 # Target: visually deterministic for "forms" subset (no tables/images/fields/hyperlinks)
+#
+# Based on UltimateReconstructorV11, with major improvements:
+# 1) Normal base style with full default attributes (Times New Roman, 12pt, etc.)
+# 2) Paragraph styles inherit from Normal (basedOn)
+# 3) Character styles support; runs use rStyle instead of direct rPr
+# 4) Numbering pStyle mapping preserved
 
 from __future__ import annotations
 
@@ -22,8 +28,43 @@ R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 PR_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
-NSMAP_W = {"w": W_NS, "r": R_NS}
 BASE_DIR = "."
+
+# Default Normal values (same as in parser)
+NORMAL_P_FORMAT: Dict[str, Any] = {
+    "alignment": "LEFT",
+    "indentStartTwip": 0,
+    "indentEndTwip": 0,
+    "indentFirstLineTwip": 0,
+    "indentHangingTwip": 0,
+    "spaceBeforeTwip": 0,
+    "spaceAfterTwip": 0,
+    "lineTwip": 240,
+    "lineRule": "AUTO",
+    "keepNext": False,
+    "keepLines": False,
+    "pageBreakBefore": False,
+    "widowControl": True,
+    "snapToGrid": False,
+    "contextualSpacing": False,
+}
+NORMAL_R_FORMAT: Dict[str, Any] = {
+    "rFonts": {
+        "ascii": "Times New Roman",
+        "hAnsi": "Times New Roman",
+        "eastAsia": "SimSun;宋体",
+        "cs": "Times New Roman"
+    },
+    "font_size_half_points": 24,
+    "bold": False,
+    "italic": False,
+    "color": "auto",
+    "vertical_align": "baseline",
+    "all_caps": False,
+    "charSpacingTwip": 0,
+    "positionHalfPoints": 0,
+    "lang": {"eastAsia": "zh-CN"}
+}
 
 
 def qn_w(local: str) -> str:
@@ -78,30 +119,16 @@ def _safe_int(v: Any) -> Optional[int]:
         return None
 
 
-def _pick_docdefaults_from_styles(styles: Dict[str, Any], content: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Choose the most frequent style_id from content and use its r_format as docDefaults.
-    Deterministic tie-break: smallest style_id.
-    """
-    counts: Dict[str, int] = {}
-    for p in content:
-        sid = p.get("style_id")
-        if not sid:
+def _merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(a)
+    for k, v in b.items():
+        if v is None:
             continue
-        counts[sid] = counts.get(sid, 0) + 1
-
-    if not counts:
-        return {}
-
-    best_count = max(counts.values())
-    best_ids = sorted([sid for sid, c in counts.items() if c == best_count])
-    best = best_ids[0]
-    st = styles.get(best, {})
-    rfmt = st.get("r_format", {})
-    return rfmt if isinstance(rfmt, dict) else {}
+        out[k] = v
+    return out
 
 
-class UltimateReconstructorV10:
+class UltimateReconstructorV12:
     def __init__(self, raw_json_path: str):
         self.raw_json_path = raw_json_path
         with open(raw_json_path, "r", encoding="utf-8") as f:
@@ -112,17 +139,24 @@ class UltimateReconstructorV10:
             if k not in self.data:
                 raise ValueError(f"RAW JSON missing required key: {k}")
 
-        self.meta: Dict[str, Any] = self.data["meta"] or {}
-        self.document_info: Dict[str, Any] = self.data["document_info"] or {}
-        self.numbering_definitions: Dict[str, Any] = self.data["numbering_definitions"] or {}
-        self.styles: Dict[str, Any] = self.data["styles"] or {}
-        self.content: List[Dict[str, Any]] = self.data["content"] or []
-        self.emitted_paragraph_style_ids: set[str] = set()
+        self.meta: Dict[str, Any] = self.data.get("meta", {})
+        self.document_info: Dict[str, Any] = self.data.get("document_info", {})
+        self.numbering_definitions: Dict[str, Any] = self.data.get("numbering_definitions", {})
+        self.styles: Dict[str, Any] = self.data.get("styles", {})          # paragraph styles (diff)
+        self.char_styles: Dict[str, Any] = self.data.get("character_styles", {})
+        self.content: List[Dict[str, Any]] = self.data.get("content", [])
 
-        self.default_style_id: Optional[str] = None
-        default_style_id = self.meta.get("default_style_id")
-        if isinstance(default_style_id, str) and default_style_id in self.styles:
-            self.default_style_id = default_style_id
+        self.default_style_id: Optional[str] = self.meta.get("default_style_id")
+
+        # Prepare mapping: style_id -> word_style_id
+        self.style_id_to_word: Dict[str, str] = {}
+        for sid, st in self.styles.items():
+            self.style_id_to_word[sid] = st.get("word_style_id", sid)
+        for cid, st in self.char_styles.items():
+            self.style_id_to_word[cid] = st.get("word_style_id", cid)
+
+        # Build map for numbering pStyle replacement (if needed)
+        self._prepare_numbering_pstyles()
 
         unsupported_run_types = []
         for p_item in self.content:
@@ -137,6 +171,28 @@ class UltimateReconstructorV10:
             f"unsupported_runs_count={len(unsupported_run_types)}"
         )
 
+    def _prepare_numbering_pstyles(self) -> None:
+        """
+        If numbering_definitions contain pStyle values that are source_word_style_id,
+        replace them with the corresponding word_style_id from our styles.
+        This is idempotent: if already replaced, fine.
+        """
+        # Build reverse map: source_word_style_id -> word_style_id
+        src_to_word = {}
+        for st in self.styles.values():
+            src = st.get("source_word_style_id")
+            if src:
+                src_to_word[src] = st.get("word_style_id", src)
+
+        # Traverse numbering and replace
+        for num_rec in self.numbering_definitions.values():
+            levels = num_rec.get("levels", {})
+            for lvl_rec in levels.values():
+                ps = lvl_rec.get("pStyle")
+                if ps and ps in src_to_word:
+                    lvl_rec["pStyle"] = src_to_word[ps]
+
+
     # =========================
     # PUBLIC
     # =========================
@@ -144,17 +200,22 @@ class UltimateReconstructorV10:
     def build_docx(self, out_docx_path: str) -> None:
         package_files: Dict[str, bytes] = {}
 
-        # XML parts
         styles_xml = self._build_styles_xml()
         document_xml = self._build_document_xml()
         numbering_xml = self._build_numbering_xml()
-
         settings_xml = self._build_settings_xml()
 
-        # Relationships & content types
         rels_root = self._build_root_rels()
-        doc_rels = self._build_document_rels(has_numbering=bool(self.numbering_definitions), has_styles=True, has_settings=True)
-        content_types = self._build_content_types(has_numbering=bool(self.numbering_definitions), has_styles=True, has_settings=True)
+        doc_rels = self._build_document_rels(
+            has_numbering=bool(self.numbering_definitions),
+            has_styles=True,
+            has_settings=True
+        )
+        content_types = self._build_content_types(
+            has_numbering=bool(self.numbering_definitions),
+            has_styles=True,
+            has_settings=True
+        )
 
         package_files["word/document.xml"] = self._serialize_xml(document_xml, standalone=True)
         package_files["word/styles.xml"] = self._serialize_xml(styles_xml, standalone=True)
@@ -190,77 +251,40 @@ class UltimateReconstructorV10:
         for p_item in self.content:
             p = _w_sub(body, "p")
             style_id = p_item.get("style_id")
-            source_word_style_id = p_item.get("source_word_style_id")
             runs = p_item.get("runs", [])
-            if style_id is None:
-                style_id = ""
 
-            st = self.styles.get(style_id, {"p_format": {}, "r_format": {}})
-            p_format = st.get("p_format", {}) or {}
-            base_r = st.get("r_format", {}) or {}
+            # Создаём pPr и добавляем ссылку на стиль
+            pPr = _w_sub(p, "pPr")
+            if style_id:
+                word_id = self.style_id_to_word.get(style_id, style_id)
+                pStyle = _w_sub(pPr, "pStyle")
+                _set_w_attr(pStyle, "val", word_id)
 
-            # paragraph properties
-            p_format_for_emit = dict(p_format)
-            num_ref = p_format_for_emit.get("numbering")
-            if isinstance(num_ref, dict):
-                indent_pairs = [
-                    ("indentStartTwip", "indentStartTwipOrigin"),
-                    ("indentEndTwip", "indentEndTwipOrigin"),
-                    ("indentFirstLineTwip", "indentFirstLineTwipOrigin"),
-                    ("indentHangingTwip", "indentHangingTwipOrigin"),
-                ]
-                for indent_key, origin_key in indent_pairs:
-                    if p_format_for_emit.get(origin_key) == "style":
-                        p_format_for_emit.pop(indent_key, None)
-                    p_format_for_emit.pop(origin_key, None)
+            # --- ДОБАВЛЯЕМ ЛОКАЛЬНЫЕ СВОЙСТВА АБЗАЦА ---
+            local_p_format = p_item.get("p_format")
+            if local_p_format:
+                local_pPr = self._build_pPr(local_p_format)
+                if local_pPr is not None:
+                    # Переносим все дочерние элементы из local_pPr в pPr
+                    for child in local_pPr:
+                        pPr.append(child)
+            # -----------------------------------------
+            # Optional direct p_override (if present) – not used in current schema, but could be added
 
-            pPr = self._build_pPr(p_format_for_emit)
-            if pPr is not None:
-                p.append(pPr)
-
-            # Emit paragraph style reference only for styles materialized in styles.xml.
-            style_ref_to_emit: Optional[str] = None
-            if isinstance(source_word_style_id, str) and source_word_style_id in self.emitted_paragraph_style_ids:
-                style_ref_to_emit = source_word_style_id
-            elif "Normal" in self.emitted_paragraph_style_ids:
-                style_ref_to_emit = "Normal"
-
-            if style_ref_to_emit is not None:
-                if pPr is None:
-                    pPr = _w_sub(p, "pPr")
-                pStyle_el = _w_sub(pPr, "pStyle")
-                _set_w_attr(pStyle_el, "val", style_ref_to_emit)
-
-            # runs
-            if not runs:
-                # empty paragraph: keep it empty (format already in pPr)
-                # note: Word uses paragraph mark's rPr inside pPr/rPr, but we store base_r in style.
-                # For visual determinism, add paragraph mark rPr to pPr if style has run-format.
-                if base_r:
-                    if pPr is None:
-                        pPr = _w_sub(p, "pPr")
-                    rPr_mark = self._build_rPr(base_r)
-                    if rPr_mark is not None:
-                        existing_rPr = pPr.find(qn_w("rPr"))
-                        if existing_rPr is None:
-                            existing_rPr = _w_sub(pPr, "rPr")
-                        existing_rPr.extend(list(rPr_mark))
-                continue
-
+            # Runs
             for run in runs:
-                rtype = run.get("type")
-                if rtype not in ("text", "tab", "break", "sym", "cr"):
-                    # unsupported run types do not contribute in v10 (RULE-RUN-UNSUPPORTED)
-                    continue
-
                 r = _w_sub(p, "r")
-                # Stage transition: for non-empty paragraphs, style r_format is the base.
-                # Emit only explicit run-local diff into w:rPr (no synthesized base fields).
-                diff = run.get("diff", {}) or {}
-                rPr = self._build_rPr(diff)
-                if rPr is not None:
-                    r.append(rPr)
+                rtype = run.get("type")
 
+                # Run properties: if char_style_id present, add rStyle
+                char_style_id = run.get("char_style_id")
+                if char_style_id:
+                    rPr_el = _w_sub(r, "rPr")
+                    rStyle = _w_sub(rPr_el, "rStyle")
+                    word_id = self.style_id_to_word.get(char_style_id, char_style_id)
+                    _set_w_attr(rStyle, "val", word_id)
+
+                # Content
                 if rtype == "text":
                     txt = run.get("text", "")
                     t = _w_sub(r, "t")
@@ -273,7 +297,6 @@ class UltimateReconstructorV10:
 
                 elif rtype == "break":
                     br = _w_sub(r, "br")
-                    # optional break_type from RAW schema (textWrapping/page/column)
                     bt = run.get("break_type")
                     if bt in ("textWrapping", "page", "column"):
                         _set_w_attr(br, "type", bt)
@@ -283,19 +306,17 @@ class UltimateReconstructorV10:
 
                 elif rtype == "sym":
                     # In your schema: sym.text is a string; we treat it as literal char if possible.
-                    # If it's JSON like {"font":"Wingdings","char":"F0A7"}, you can adjust later.
                     sym_text = run.get("text", "")
-                    # Best-effort: output as plain text
                     t = _w_sub(r, "t")
                     if _needs_xml_preserve(sym_text):
                         t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
                     t.text = sym_text
 
                 else:
-                    # unreachable due to early type guard
+                    # unsupported run types (softHyphen, noBreakHyphen) – ignore
                     continue
 
-        # sectPr from document_info.page_setup (must exist per your requirement)
+        # sectPr from document_info.page_setup
         sectPr = self._build_sectPr(self.document_info.get("page_setup", {}) or {})
         if sectPr is not None:
             body.append(sectPr)
@@ -303,7 +324,7 @@ class UltimateReconstructorV10:
         return doc
 
     # =========================
-    # BUILD: pPr
+    # BUILD: pPr from p_format diff
     # =========================
 
     def _build_pPr(self, p_format: Dict[str, Any]) -> Optional[etree._Element]:
@@ -311,61 +332,45 @@ class UltimateReconstructorV10:
             return None
 
         pPr = _w_el("pPr")
-        # If paragraph has numbering (numPr), do NOT emit paragraph-level indents.
-        # Otherwise <w:pPr>/<w:ind> can override level indents from numbering.xml in Word.
-        num = p_format.get("numbering")
-        has_numpr = (
-                    isinstance(num, dict)
-         and (num.get("numId") is not None)
-         and (num.get("ilvl") is not None)
-         and (_safe_int(num.get("ilvl")) is not None)
-        )
-
-        # alignment
+        # Alignment
         align = p_format.get("alignment")
         if align in ("LEFT", "CENTER", "RIGHT", "JUSTIFY"):
             jc = _w_sub(pPr, "jc")
             _set_w_attr(jc, "val", align.lower() if align != "JUSTIFY" else "both")
 
-        # indents
+        # Indents
         ind_keys = ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")
-        if any((k in p_format) and (p_format.get(k) is not None) for k in ind_keys):
+        if any(k in p_format for k in ind_keys):
             ind = _w_sub(pPr, "ind")
             if "indentStartTwip" in p_format:
-                _set_w_attr_int(ind, "left", p_format.get("indentStartTwip"))
+                _set_w_attr_int(ind, "left", p_format["indentStartTwip"])
             if "indentEndTwip" in p_format:
-                _set_w_attr_int(ind, "right", p_format.get("indentEndTwip"))
+                _set_w_attr_int(ind, "right", p_format["indentEndTwip"])
             if "indentFirstLineTwip" in p_format:
-                _set_w_attr_int(ind, "firstLine", p_format.get("indentFirstLineTwip"))
+                _set_w_attr_int(ind, "firstLine", p_format["indentFirstLineTwip"])
             if "indentHangingTwip" in p_format:
-                _set_w_attr_int(ind, "hanging", p_format.get("indentHangingTwip"))
+                _set_w_attr_int(ind, "hanging", p_format["indentHangingTwip"])
 
-        # spacing
+        # Spacing
         if any(k in p_format for k in (
-            "spaceBeforeTwip",
-            "spaceAfterTwip",
-            "spaceBeforeLines",
-            "spaceAfterLines",
-            "beforeAutospacing",
-            "afterAutospacing",
-            "lineTwip",
-            "lineRule",
+                "spaceBeforeTwip", "spaceAfterTwip", "spaceBeforeLines", "spaceAfterLines",
+                "beforeAutospacing", "afterAutospacing", "lineTwip", "lineRule"
         )):
             sp = _w_sub(pPr, "spacing")
             if "spaceBeforeTwip" in p_format:
-                _set_w_attr_int(sp, "before", p_format.get("spaceBeforeTwip"))
+                _set_w_attr_int(sp, "before", p_format["spaceBeforeTwip"])
             if "spaceAfterTwip" in p_format:
-                _set_w_attr_int(sp, "after", p_format.get("spaceAfterTwip"))
+                _set_w_attr_int(sp, "after", p_format["spaceAfterTwip"])
             if "spaceBeforeLines" in p_format:
-                _set_w_attr_int(sp, "beforeLines", p_format.get("spaceBeforeLines"))
+                _set_w_attr_int(sp, "beforeLines", p_format["spaceBeforeLines"])
             if "spaceAfterLines" in p_format:
-                _set_w_attr_int(sp, "afterLines", p_format.get("spaceAfterLines"))
+                _set_w_attr_int(sp, "afterLines", p_format["spaceAfterLines"])
             if "beforeAutospacing" in p_format:
-                _set_w_attr(sp, "beforeAutospacing", "1" if p_format.get("beforeAutospacing") else "0")
+                _set_w_attr(sp, "beforeAutospacing", "1" if p_format["beforeAutospacing"] else "0")
             if "afterAutospacing" in p_format:
-                _set_w_attr(sp, "afterAutospacing", "1" if p_format.get("afterAutospacing") else "0")
+                _set_w_attr(sp, "afterAutospacing", "1" if p_format["afterAutospacing"] else "0")
             if "lineTwip" in p_format:
-                _set_w_attr_int(sp, "line", p_format.get("lineTwip"))
+                _set_w_attr_int(sp, "line", p_format["lineTwip"])
             lr = p_format.get("lineRule")
             if lr == "AUTO":
                 _set_w_attr(sp, "lineRule", "auto")
@@ -374,7 +379,7 @@ class UltimateReconstructorV10:
             elif lr == "EXACT":
                 _set_w_attr(sp, "lineRule", "exact")
 
-        # tabs (tab stops)
+        # ========== НАДЁЖНЫЙ БЛОК ДЛЯ TABS ==========
         tabs = p_format.get("tabs")
         if isinstance(tabs, list) and tabs:
             tabs_el = _w_sub(pPr, "tabs")
@@ -391,8 +396,9 @@ class UltimateReconstructorV10:
                 leader = t.get("leader")
                 if leader is not None:
                     _set_w_attr(tab_el, "leader", leader)
+        # =============================================
 
-        # numbering
+        # Numbering
         num = p_format.get("numbering")
         if isinstance(num, dict):
             numId = num.get("numId")
@@ -406,20 +412,19 @@ class UltimateReconstructorV10:
                     numId_el = _w_sub(numPr, "numId")
                     _set_w_attr(numId_el, "val", str(numId))
 
-        # boolean paragraph flags (emit explicit false as val="0")
+        # Boolean paragraph flags
         for k, tag in (
-            ("keepNext", "keepNext"),
-            ("keepLines", "keepLines"),
-            ("pageBreakBefore", "pageBreakBefore"),
-            ("widowControl", "widowControl"),
-            ("snapToGrid", "snapToGrid"),
-            ("contextualSpacing", "contextualSpacing"),
+                ("keepNext", "keepNext"),
+                ("keepLines", "keepLines"),
+                ("pageBreakBefore", "pageBreakBefore"),
+                ("widowControl", "widowControl"),
+                ("snapToGrid", "snapToGrid"),
+                ("contextualSpacing", "contextualSpacing"),
         ):
-            if k not in p_format:
-                continue
-            el = _w_sub(pPr, tag)
-            if p_format.get(k) is False:
-                _set_w_attr(el, "val", "0")
+            if k in p_format:
+                el = _w_sub(pPr, tag)
+                if p_format[k] is False:
+                    _set_w_attr(el, "val", "0")
 
         text_alignment = p_format.get("textAlignment")
         if text_alignment in ("AUTO", "BASELINE", "TOP", "CENTER", "BOTTOM"):
@@ -429,7 +434,7 @@ class UltimateReconstructorV10:
         return pPr
 
     # =========================
-    # BUILD: rPr
+    # BUILD: rPr from r_format (diff or absolute)
     # =========================
 
     def _build_rPr(self, r_format: Dict[str, Any]) -> Optional[etree._Element]:
@@ -443,10 +448,8 @@ class UltimateReconstructorV10:
         if isinstance(rFonts, dict) and rFonts:
             rf = _w_sub(rPr, "rFonts")
             for k, v in rFonts.items():
-                if v is None:
-                    continue
-                # store as w:ascii etc.
-                _set_w_attr(rf, k, v)
+                if v is not None:
+                    _set_w_attr(rf, k, v)
 
         # size
         if "font_size_half_points" in r_format:
@@ -454,6 +457,8 @@ class UltimateReconstructorV10:
             if szv is not None:
                 sz = _w_sub(rPr, "sz")
                 _set_w_attr(sz, "val", szv)
+                szCs = _w_sub(rPr, "szCs")
+                _set_w_attr(szCs, "val", szv)
 
         # bold/italic
         if "bold" in r_format:
@@ -495,18 +500,17 @@ class UltimateReconstructorV10:
         if isinstance(lang, dict) and lang:
             le = _w_sub(rPr, "lang")
             for k, v in lang.items():
-                if v is None:
-                    continue
-                _set_w_attr(le, k, v)
+                if v is not None:
+                    _set_w_attr(le, k, v)
 
-        # (optional extended) charSpacingTwip -> w:spacing
+        # charSpacingTwip -> w:spacing
         if "charSpacingTwip" in r_format:
             spv = _safe_int(r_format.get("charSpacingTwip"))
             if spv is not None:
                 sp = _w_sub(rPr, "spacing")
                 _set_w_attr(sp, "val", spv)
 
-        # (optional extended) positionHalfPoints -> w:position
+        # positionHalfPoints -> w:position
         if "positionHalfPoints" in r_format:
             posv = _safe_int(r_format.get("positionHalfPoints"))
             if posv is not None:
@@ -568,9 +572,35 @@ class UltimateReconstructorV10:
             if "equalWidth" in cols:
                 _set_w_attr(cols_el, "equalWidth", "1" if cols.get("equalWidth") else "0")
 
-        # docGrid is optional; not in schema now. Skip.
+        if "linePitchTwip" in page_setup:
+            docGrid = _w_sub(sectPr, "docGrid")
+            _set_w_attr_int(docGrid, "linePitch", page_setup["linePitchTwip"])
 
         return sectPr
+
+    # =========================
+    # BUILD: settings.xml
+    # =========================
+
+    def _build_settings_xml(self) -> etree._Element:
+        settings = etree.Element(qn_w("settings"), nsmap={"w": W_NS})
+
+        dts = None
+        doc_settings = (self.document_info.get("settings") or {})
+        if isinstance(doc_settings, dict):
+            dts = doc_settings.get("defaultTabStopTwip")
+
+        if dts is not None:
+            dts_int = _safe_int(dts)
+            if dts_int is not None:
+                el = _w_sub(settings, "defaultTabStop")
+                _set_w_attr(el, "val", dts_int)
+
+        # Добавить языковую тему
+        themeFontLang = _w_sub(settings, "themeFontLang")
+        _set_w_attr(themeFontLang, "val", "ru-RU")
+
+        return settings
 
     # =========================
     # BUILD: styles.xml
@@ -579,132 +609,98 @@ class UltimateReconstructorV10:
     def _build_styles_xml(self) -> etree._Element:
         styles = etree.Element(qn_w("styles"), nsmap={"w": W_NS})
 
-        # docDefaults from meta.default_style_id r_format when valid, otherwise fallback to most common style's r_format (deterministic)
-        use_default_style_id = self.default_style_id is not None and self.default_style_id in self.styles
-        if use_default_style_id:
-            dd_style = self.styles.get(self.default_style_id, {})
-            dd_r = dd_style.get("r_format", {}) if isinstance(dd_style, dict) else {}
-        else:
-            dd_r = _pick_docdefaults_from_styles(self.styles, self.content)
-
+        # --- docDefaults ---
         docDefaults = _w_sub(styles, "docDefaults")
         rPrDefault = _w_sub(docDefaults, "rPrDefault")
         rPr = _w_sub(rPrDefault, "rPr")
 
-        # Apply rFonts + sz + lang into docDefaults if present
-        if isinstance(dd_r, dict):
-            if "rFonts" in dd_r:
-                rf = _w_sub(rPr, "rFonts")
-                for k, v in (dd_r.get("rFonts") or {}).items():
-                    if v is None:
-                        continue
+        # Добавляем rFonts из NORMAL_R_FORMAT
+        if "rFonts" in NORMAL_R_FORMAT:
+            rf = _w_sub(rPr, "rFonts")
+            for k, v in NORMAL_R_FORMAT["rFonts"].items():
+                if v:
                     _set_w_attr(rf, k, v)
-            if "font_size_half_points" in dd_r:
-                sz = _w_sub(rPr, "sz")
-                _set_w_attr_int(sz, "val", dd_r.get("font_size_half_points"))
-            if "lang" in dd_r:
-                lang = _w_sub(rPr, "lang")
-                for k, v in (dd_r.get("lang") or {}).items():
-                    if v is None:
-                        continue
+
+        # Добавляем lang
+        if "lang" in NORMAL_R_FORMAT:
+            lang = _w_sub(rPr, "lang")
+            for k, v in NORMAL_R_FORMAT["lang"].items():
+                if v:
                     _set_w_attr(lang, k, v)
 
-        # Minimal default paragraph style ("Normal")
-        st = _w_sub(styles, "style", attrib={
+        # Добавляем размер шрифта (обязательно!)
+        sz_val = NORMAL_R_FORMAT.get("font_size_half_points", 24)
+        sz = _w_sub(rPr, "sz")
+        _set_w_attr_int(sz, "val", sz_val)
+        szCs = _w_sub(rPr, "szCs")
+        _set_w_attr_int(szCs, "val", sz_val)
+
+        # Можно добавить и другие атрибуты, если они есть в NORMAL_R_FORMAT,
+        # например bold, italic и т.д., но обычно в docDefaults их не кладут.
+        # Оставляем как есть.
+
+        pPrDefault = _w_sub(docDefaults, "pPrDefault")
+        _w_sub(pPrDefault, "pPr")  # pPr пока пустой, можно не заполнять
+
+        # --- Normal style (paragraph, default) ---
+        normal_style = _w_sub(styles, "style", attrib={
             f"{{{W_NS}}}type": "paragraph",
             f"{{{W_NS}}}default": "1",
             f"{{{W_NS}}}styleId": "Normal"
         })
-        name = _w_sub(st, "name")
-        _set_w_attr(name, "val", "Normal")
+        name = _w_sub(normal_style, "name")
+        _set_w_attr(name, "val", "Обычный")
+        # Build pPr from NORMAL_P_FORMAT
+        pPr_norm = self._build_pPr(NORMAL_P_FORMAT)
+        if pPr_norm is not None:
+            normal_style.append(pPr_norm)
+        rPr_norm = self._build_rPr(NORMAL_R_FORMAT)
+        if rPr_norm is not None:
+            normal_style.append(rPr_norm)
 
-        if use_default_style_id:
-            normal_style = self.styles.get(self.default_style_id, {})
-            if isinstance(normal_style, dict):
-                normal_p = normal_style.get("p_format", {}) or {}
-                normal_r = normal_style.get("r_format", {}) or {}
-                if isinstance(normal_p, dict) and normal_p:
-                    pPr = self._build_pPr(normal_p)
-                    if pPr is not None:
-                        st.append(pPr)
-                if isinstance(normal_r, dict) and normal_r:
-                    rPr = self._build_rPr(normal_r)
-                    if rPr is not None:
-                        st.append(rPr)
+        # --- Other paragraph styles (basedOn Normal) ---
+        for sid, st in self.styles.items():
+            # Skip if this is the default style? No, we still create it, but it will have basedOn Normal.
+            word_id = st.get("word_style_id", sid)
+            p_diff = st.get("p_format", {})
+            r_diff = st.get("r_format", {})
 
-        # Stage 3: materialize all unique paragraph styles for each `source_word_style_id`
-        # Deterministic representative pick: most frequent style_id in content for each source_word_style_id;
-        # tie-break: smallest style_id.
-        src_map = self._collect_source_word_styles()
-        for src_style_id in sorted(src_map.keys()):
-            rep_style_id = src_map[src_style_id]
-            rep = self.styles.get(rep_style_id, {})
-            if not isinstance(rep, dict):
-                continue
-
-            # ✅ Исправлено: используем rep вместо rec
-            p_fmt_raw = rep.get("p_format", {}) or {}
-            r_fmt_raw = rep.get("r_format", {}) or {}
-
-            # Получаем базовые форматы из Normal стиля
-            normal_style = self.styles.get("Normal", {})
-            normal_p = normal_style.get("p_format", {}) or {}
-            normal_r = normal_style.get("r_format", {}) or {}
-
-            p_fmt = self._merge_formats(normal_p, p_fmt_raw)
-            r_fmt = self._merge_formats(normal_r, r_fmt_raw)
-
-            # Do not synthesize style-level numbering
-            p_fmt.pop("numbering", None)
-
-            # ✅ Исправлено: используем src_style_id как styleId
-            st_src = _w_sub(styles, "style", attrib={
+            style_el = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": str(style_xml_id),
+                f"{{{W_NS}}}styleId": word_id
             })
-            self.emitted_paragraph_style_ids.add(str(src_style_id))
+            name_el = _w_sub(style_el, "name")
+            _set_w_attr(name_el, "val", st.get("title", sid))
 
-            nm = _w_sub(st_src, "name")
-            # ✅ Исправлено: используем имя из репрезентативного стиля
-            style_name = rep.get("name") or str(src_style_id)
-            _set_w_attr(nm, "val", style_name)
+            based_on = _w_sub(style_el, "basedOn")
+            _set_w_attr(based_on, "val", "Normal")
 
-            ppr = self._build_pPr(p_fmt)
-            if ppr is not None:
-                st_src.append(ppr)
-            rpr = self._build_rPr(r_fmt)
-            if rpr is not None:
-                st_src.append(rpr)
+            # Build pPr from diff (only properties present in diff)
+            pPr = self._build_pPr(p_diff)
+            if pPr is not None:
+                style_el.append(pPr)
+            rPr = self._build_rPr(r_diff)
+            if rPr is not None:
+                style_el.append(rPr)
+
+        # --- Character styles ---
+        for cid, st in self.char_styles.items():
+            word_id = st.get("word_style_id", cid)
+            r_abs = st.get("r_format", {})
+
+            style_el = _w_sub(styles, "style", attrib={
+                f"{{{W_NS}}}type": "character",
+                f"{{{W_NS}}}styleId": word_id
+            })
+            name_el = _w_sub(style_el, "name")
+            _set_w_attr(name_el, "val", st.get("title", cid))
+
+            # Character styles do not inherit from Normal (they are standalone)
+            rPr = self._build_rPr(r_abs)
+            if rPr is not None:
+                style_el.append(rPr)
 
         return styles
-
-    def _collect_source_word_styles(self) -> Dict[str, str]:
-        """
-        Build mapping: source_word_style_id -> representative internal style_id.
-        Representative is chosen deterministically:
-          - most frequent internal style_id among content items with that source_word_style_id
-          - tie-break by smallest style_id
-        Excludes empty ids and "Normal".
-        """
-        counts: Dict[str, Dict[str, int]] = {}
-        for p in self.content:
-            src = p.get("source_word_style_id")
-            sid = p.get("style_id")
-            if not isinstance(src, str) or not src:
-                continue
-            if src == "Normal":
-                continue
-            if not isinstance(sid, str) or not sid:
-                continue
-            bucket = counts.setdefault(src, {})
-            bucket[sid] = bucket.get(sid, 0) + 1
-
-        out: Dict[str, str] = {}
-        for src, bucket in counts.items():
-            best_count = max(bucket.values())
-            best_ids = sorted([sid for sid, c in bucket.items() if c == best_count])
-            out[src] = best_ids[0]
-        return out
 
     # =========================
     # BUILD: numbering.xml
@@ -714,7 +710,6 @@ class UltimateReconstructorV10:
         numbering = etree.Element(qn_w("numbering"), nsmap={"w": W_NS})
 
         # Collect abstractNum definitions by abstractNumId from JSON records
-        # JSON shape: numId -> {abstractNumId?, levels{ilvl: {...}}, lvl_overrides?}
         abstract_map: Dict[str, Dict[str, Any]] = {}
         for numId, rec in self.numbering_definitions.items():
             abs_id = rec.get("abstractNumId")
@@ -738,8 +733,6 @@ class UltimateReconstructorV10:
                 _set_w_attr(mlt_el, "val", multi_level_type)
 
             levels = abstract_map[abs_id].get("levels", {}) or {}
-            seen_ilvls = set()
-            # levels keys are strings of ints
             for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
                 lvl_rec = levels[ilvl_str] or {}
                 fmt = lvl_rec.get("format")
@@ -758,15 +751,9 @@ class UltimateReconstructorV10:
                         start = _w_sub(lvl_el, "start")
                         _set_w_attr(start, "val", sv)
 
-                fmt = lvl_rec.get("format")
-                if not isinstance(fmt, str):
-                    continue
                 numFmt = _w_sub(lvl_el, "numFmt")
                 _set_w_attr(numFmt, "val", fmt)
 
-                template = lvl_rec.get("template")
-                if not isinstance(template, str):
-                    continue
                 lvlText = _w_sub(lvl_el, "lvlText")
                 _set_w_attr(lvlText, "val", template)
 
@@ -795,22 +782,16 @@ class UltimateReconstructorV10:
                 if isinstance(level_ppr, dict):
                     pPr_el = _w_sub(lvl_el, "pPr")
 
-                    has_ppr = False
                     if any(k in level_ppr for k in ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")):
                         ind_el = _w_sub(pPr_el, "ind")
                         _set_w_attr_int(ind_el, "left", level_ppr.get("indentStartTwip"))
                         _set_w_attr_int(ind_el, "right", level_ppr.get("indentEndTwip"))
                         _set_w_attr_int(ind_el, "firstLine", level_ppr.get("indentFirstLineTwip"))
                         _set_w_attr_int(ind_el, "hanging", level_ppr.get("indentHangingTwip"))
-                        if ind_el.attrib:
-                            has_ppr = True
-                        else:
-                            pPr_el.remove(ind_el)
 
                     tabs = level_ppr.get("tabs")
                     if isinstance(tabs, list) and tabs:
                         tabs_el = _w_sub(pPr_el, "tabs")
-                        tabs_count = 0
                         for tab in tabs:
                             if not isinstance(tab, dict):
                                 continue
@@ -824,14 +805,6 @@ class UltimateReconstructorV10:
                             leader = tab.get("leader")
                             if isinstance(leader, str):
                                 _set_w_attr(tab_el, "leader", leader)
-                            tabs_count += 1
-                        if tabs_count > 0:
-                            has_ppr = True
-                        else:
-                            pPr_el.remove(tabs_el)
-
-                    if not has_ppr:
-                        lvl_el.remove(pPr_el)
 
                 level_rpr = lvl_rec.get("level_rPr")
                 if isinstance(level_rpr, dict) and level_rpr:
@@ -864,37 +837,6 @@ class UltimateReconstructorV10:
                             _set_w_attr(st, "val", ov_start)
 
         return numbering
-
-    # =========================
-    # BUILD: settings.xml
-    # =========================
-
-    def _build_settings_xml(self) -> etree._Element:
-        settings = etree.Element(qn_w("settings"), nsmap={"w": W_NS})
-
-        dts = None
-        doc_settings = (self.document_info.get("settings") or {})
-        if isinstance(doc_settings, dict):
-            dts = doc_settings.get("defaultTabStopTwip")
-
-        if dts is not None:
-            dts_int = _safe_int(dts)
-            if dts_int is not None:
-                el = _w_sub(settings, "defaultTabStop")
-                _set_w_attr(el, "val", dts_int)
-
-        return settings
-
-    def _dump_reconstructed_parts(self, package_files: Dict[str, bytes], out_root_dir: str) -> None:
-        os.makedirs(out_root_dir, exist_ok=True)
-        for name, data in sorted(package_files.items()):
-            if not (name.endswith(".xml") or name.endswith(".rels")):
-                continue
-            out_path = os.path.join(out_root_dir, name)
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            with open(out_path, "wb") as f:
-                f.write(data)
-
 
     # =========================
     # RELATIONSHIPS & CONTENT TYPES
@@ -975,6 +917,16 @@ class UltimateReconstructorV10:
     # HELPERS
     # =========================
 
+    def _dump_reconstructed_parts(self, package_files: Dict[str, bytes], out_root_dir: str) -> None:
+        os.makedirs(out_root_dir, exist_ok=True)
+        for name, data in sorted(package_files.items()):
+            if not (name.endswith(".xml") or name.endswith(".rels")):
+                continue
+            out_path = os.path.join(out_root_dir, name)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(data)
+
     def _serialize_xml(self, root: etree._Element, standalone: bool = True) -> bytes:
         return etree.tostring(
             root,
@@ -984,25 +936,17 @@ class UltimateReconstructorV10:
             pretty_print=False
         )
 
-    def _merge_formats(self, base: Dict[str, Any], diff: Dict[str, Any]) -> Dict[str, Any]:
-        out = dict(base or {})
-        for k, v in (diff or {}).items():
-            if v is None:
-                continue
-            out[k] = v
-        return out
-
 
 if __name__ == "__main__":
     try:
-        cli = argparse.ArgumentParser(description="UltimateReconstructorV11 RAW JSON -> DOCX")
+        cli = argparse.ArgumentParser(description="UltimateReconstructorV12 RAW JSON -> DOCX")
         cli.add_argument("--in-json", dest="input_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
         cli.add_argument("--out-docx", dest="output_docx", default=os.path.join(BASE_DIR, "donor_v2.6_reconstructed.docx"))
         args = cli.parse_args()
 
-        recon = UltimateReconstructorV10(args.input_json)
+        recon = UltimateReconstructorV12(args.input_json)
         recon.build_docx(args.output_docx)
-        print("Реконструкция v4.1_plus завершена успешно!")
+        print("Реконструкция v12 завершена успешно!")
     except Exception:
         import traceback
         traceback.print_exc()

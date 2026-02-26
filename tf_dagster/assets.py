@@ -26,6 +26,7 @@ class RunPaths:
     materialized_docx: Path
     raw_json: Path
     effective_json: Path
+    optimized_json: Path
     reconstructed_docx: Path
 
     raw_donor: Path
@@ -52,6 +53,7 @@ def _mk_run_paths(context: AssetExecutionContext, input_docx: Path) -> RunPaths:
     materialized_docx = out_dir / f"{stem}.materialized.docx"
     raw_json = out_dir / f"{stem}.json"
     effective_json = out_dir / f"{stem}.effective.json"
+    optimized_json = out_dir / f"{stem}.optimized.json"  # новая строка
     reconstructed_docx = out_dir / f"{stem}.reconstructed.docx"
 
     raw_donor = raw_dir / "donor"
@@ -67,6 +69,7 @@ def _mk_run_paths(context: AssetExecutionContext, input_docx: Path) -> RunPaths:
         materialized_docx=materialized_docx,
         raw_json=raw_json,
         effective_json=effective_json,
+        optimized_json=optimized_json,  # добавлено
         reconstructed_docx=reconstructed_docx,
         raw_donor=raw_donor,
         raw_materialized=raw_materialized,
@@ -171,11 +174,29 @@ def materialize_effective(context: AssetExecutionContext, input_docx_path: str) 
     )
 
 @asset(non_argument_deps={"materialize_effective"})
+def optimize_tabs(context: AssetExecutionContext, input_docx_path: str) -> Output[Nothing]:
+    p = _mk_run_paths(context, Path(input_docx_path))
+    py = sys.executable
+
+    # Запускаем скрипт оптимизации, который использует Word COM для точного измерения
+    _run_cmd(
+        context,
+        [py, "tools/optimization/optimize_tabs.py", "--in-json", str(p.effective_json), "--out-json",
+         str(p.optimized_json)],
+        "optimize_tabs",
+    )
+
+    return Output(
+        value=None,
+        metadata={"optimized_json": MetadataValue.path(str(p.optimized_json))},
+    )
+
+@asset(non_argument_deps={"optimize_tabs"})
 def reconstruct_docx(context: AssetExecutionContext, input_docx_path: str) -> Output[Nothing]:
     p = _mk_run_paths(context, Path(input_docx_path))
     py = sys.executable
 
-    _run_cmd(context, [py, "src/reconstructor.py", "--in-json", str(p.effective_json), "--out-docx", str(p.reconstructed_docx)], "recon")
+    _run_cmd(context, [py, "src/reconstructor.py", "--in-json", str(p.optimized_json), "--out-docx", str(p.reconstructed_docx)], "recon")
     _extract_docx_raw(context, p.reconstructed_docx, p.raw_reconstructed, "raw_reconstructed")
 
     return Output(
@@ -185,3 +206,4 @@ def reconstruct_docx(context: AssetExecutionContext, input_docx_path: str) -> Ou
             "raw_reconstructed_dir": MetadataValue.path(str(p.raw_reconstructed)),
         },
     )
+

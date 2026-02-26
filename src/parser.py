@@ -1,23 +1,16 @@
-# UltimateParserV42.py
-# DOCX -> RAW JSON (schema v2.7.x / v2.8-ish) using lxml (NO python-docx)
-# Parser Version: v42
-# Schema Version: 2.8.3
-# Rules Version: 0.2
+# UltimateParserV43.py
+# DOCX -> RAW JSON (schema v2.9) with Normal base style and character styles
+# Parser Version: v43
+# Schema Version: 2.9
+# Rules Version: 0.3
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
 #
-# Based on your UltimateParserV41, with careful incremental improvements (NO hardcode):
-# 1) FIX: spacing autospacing flags parsed correctly from w:spacing attributes (not as child elements).
-# 2) ADD: spacing beforeLines/afterLines -> spaceBeforeLines/spaceAfterLines (if present).
-# 3) ADD BACK: rPr char spacing + position (charSpacingTwip, positionHalfPoints) that existed earlier.
-# 4) ADD: meta.leading=true for the first tab run in a paragraph (schema supports meta.leading).
-#
-# Rules enforced:
-# - RULE-001: hanging -> indentHangingTwip
-# - RULE-003: preserve spaces (no normalization; store xml:space preserve marker)
-# - RULE-004: do not merge runs during parsing (do not concatenate across w:r or across w:t)
-# - RULE-006: if paragraph has runs -> base_r = effective style r_format
-#            if paragraph has no runs -> base_r includes paragraph mark rPr merged in
+# Based on UltimateParserV42, with major improvements:
+# 1) Normal base style with full default attributes (Times New Roman, 12pt, etc.)
+# 2) Paragraph styles stored as diff from Normal
+# 3) Character styles introduced; runs use char_style_id instead of diff
+# 4) Numbering pStyle mapping preserved
 
 from __future__ import annotations
 
@@ -34,6 +27,47 @@ from lxml import etree
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 BASE_DIR = "."
+
+# Default Normal style values (based on Word's Normal + observed donor)
+NORMAL_P_FORMAT: Dict[str, Any] = {
+    "alignment": "LEFT",
+    "indentStartTwip": 0,
+    "indentEndTwip": 0,
+    "indentFirstLineTwip": 0,
+    "indentHangingTwip": 0,
+    "spaceBeforeTwip": 0,
+    "spaceAfterTwip": 0,
+    "lineTwip": 240,
+    "lineRule": "AUTO",
+    "keepNext": False,
+    "keepLines": False,
+    "pageBreakBefore": False,
+    "widowControl": True,
+    "snapToGrid": False,
+    "contextualSpacing": False,
+    # textAlignment not set (AUTO by absence)
+    # tabs empty list, numbering absent
+}
+NORMAL_R_FORMAT: Dict[str, Any] = {
+    "rFonts": {
+        "ascii": "Times New Roman",
+        "hAnsi": "Times New Roman",
+        "eastAsia": "SimSun;宋体",
+        "cs": "Times New Roman"
+    },
+    "font_size_half_points": 24,
+    "bold": False,
+    "italic": False,
+    "underline": None,          # absent means none
+    "color": "auto",
+    "vertical_align": "baseline",
+    "all_caps": False,
+    "charSpacingTwip": 0,
+    "positionHalfPoints": 0,
+    "lang": {
+        "eastAsia": "zh-CN"
+    }
+}
 
 
 def qn(tag: str) -> str:
@@ -80,7 +114,6 @@ def _bool_from_attr(val: Optional[str]) -> Optional[bool]:
         return False
     if val in ("1", "true", "on"):
         return True
-    # If some unexpected value appears, treat as True for presence semantics
     return True
 
 
@@ -138,17 +171,6 @@ def _dict_diff(base: Dict[str, Any], cur: Dict[str, Any]) -> Dict[str, Any]:
     return diff
 
 
-def _run_local_r_diff(base_r: Dict[str, Any], run_r: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Stage transition helper for token model (text/tab/break/cr/sym):
-    keep tokens unchanged, but keep run-local rPr as a minimal diff
-    against styles[style_id].r_format.
-    """
-    if not run_r:
-        return {}
-    return _dict_diff(base_r, run_r)
-
-
 def _sym_encode(font: str, char: str) -> str:
     """
     Stable minimal encoding for w:sym compatible with current schema (text field only).
@@ -167,9 +189,9 @@ class WordStyle:
     rPr: Dict[str, Any]   # parsed r_format-like
 
 
-class UltimateParserV41:
+class UltimateParserV43:
     """
-    Deterministic DOCX -> RAW JSON parser (schema v2.7-ish).
+    Deterministic DOCX -> RAW JSON parser (schema v2.9).
     Subset target: "forms" (no tables/images/fields/hyperlinks). Non-run nodes in paragraphs
     are ignored (proofErr etc.).
     """
@@ -206,6 +228,11 @@ class UltimateParserV41:
         self._style_key_to_id: Dict[str, str] = {}
         self._style_counter: int = 1
 
+        # Output character styles library (schema.character_styles)
+        self.out_char_styles: Dict[str, Dict[str, Any]] = {}
+        self._char_key_to_id: Dict[str, str] = {}
+        self._char_counter: int = 1
+
         # Word styles (for effective formatting)
         self.doc_defaults_r: Dict[str, Any] = {}
         self.doc_defaults_p: Dict[str, Any] = {}
@@ -214,94 +241,9 @@ class UltimateParserV41:
 
         self._init_word_styles()
 
-    # =========================
-    # PUBLIC
-    # =========================
-
-    def process(self) -> str:
-        settings: Dict[str, Any] = {}
-        default_tab_stop = self._parse_default_tab_stop()
-        if default_tab_stop is not None:
-            settings["defaultTabStopTwip"] = default_tab_stop
-
-        numbering_definitions = self._parse_numbering_definitions()
-        self._implied_numpr_by_word_style = self._build_implied_numpr_by_word_style(numbering_definitions)
-
-        result: Dict[str, Any] = {
-            "meta": {
-                "schema_version": "2.8.3",
-                "rules_version": "0.2",
-                "producer": {
-                    "name": "UltimateParserV42",
-                    "version": "v42"
-                }
-            },
-            "document_info": {
-                "page_setup": self._parse_page_setup(),
-                "settings": settings
-            },
-            "numbering_definitions": numbering_definitions,
-            "styles": {},
-            "content": []
-        }
-
-        body = self.document_xml.find(qn("w:body"))
-        default_word_style_id = self._get_default_word_paragraph_style_id()
-        paragraphs_count = 0
-        runs_count = 0
-
-        if body is None:
-            if default_word_style_id is not None:
-                default_p_format = self._effective_p_format(default_word_style_id, None)
-                default_r_format = self._effective_r_format(default_word_style_id)
-                default_style_id = self._register_out_style(default_p_format, default_r_format, source_word_style_id=default_word_style_id)
-                result["meta"]["default_style_id"] = default_style_id
-            self._finalize_out_style_metadata(result["meta"].get("default_style_id"))
-            result["styles"] = self.out_styles
-            print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
-            return json.dumps(result, ensure_ascii=False, indent=2)
-
-        for p in body.findall(qn("w:p")):
-            paragraphs_count += 1
-            pPr = p.find(qn("w:pPr"))
-            p_style_id = self._get_p_style_id(pPr)
-
-            # Effective paragraph formatting: docDefaults + style chain + direct pPr
-            base_p_format = self._effective_p_format(p_style_id, pPr)
-
-            # Effective run formatting: docDefaults + style chain
-            style_r_format = self._effective_r_format(p_style_id)
-
-            # Paragraph mark rPr (direct pPr/rPr) – apply only for empty paragraphs (RULE-006)
-            para_mark_rPr = self._parse_rPr(pPr.find(qn("w:rPr")) if pPr is not None else None)
-
-            runs = self._parse_runs(p, base_r_for_diff=style_r_format)
-            runs_count += len(runs)
-
-            # RULE-006:
-            if runs:
-                base_r_for_style = style_r_format
-            else:
-                base_r_for_style = _merge(style_r_format, para_mark_rPr)
-
-            style_id = self._register_out_style(base_p_format, base_r_for_style, source_word_style_id=p_style_id)
-
-            item: Dict[str, Any] = {"style_id": style_id, "runs": runs}
-            if p_style_id is not None:
-                item["source_word_style_id"] = p_style_id
-            result["content"].append(item)
-
-        if default_word_style_id is not None:
-            default_p_format = self._effective_p_format(default_word_style_id, None)
-            default_r_format = self._effective_r_format(default_word_style_id)
-            default_style_id = self._register_out_style(default_p_format, default_r_format, source_word_style_id=default_word_style_id)
-            result["meta"]["default_style_id"] = default_style_id
-
-        # Finalize style materialization metadata (titles/word ids) deterministically (Stage 1; reconstructor may ignore).
-        self._finalize_out_style_metadata(result["meta"].get("default_style_id"))
-        result["styles"] = self.out_styles
-        print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} styles_count={len(result['styles'])} empty_p_format_count={sum(1 for st in result['styles'].values() if not (st.get('p_format') or {}))} numbering_nums_count={len(result.get('numbering_definitions', {}))} numbering_abstractNums_count={len({str((rec or {}).get('abstractNumId')) for rec in result.get('numbering_definitions', {}).values() if (rec or {}).get('abstractNumId') is not None})} paragraphs_count={paragraphs_count} runs_count={runs_count}")
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        # Compute Normal effective formatting (will be set in process)
+        self.normal_p_format: Dict[str, Any] = {}
+        self.normal_r_format: Dict[str, Any] = {}
 
     # =========================
     # WORD STYLES INIT (docDefaults + style chain)
@@ -460,16 +402,16 @@ class UltimateParserV41:
         return list(reversed(stack))
 
     # =========================
-    # OUTPUT STYLE LIBRARY (schema.styles)
+    # OUTPUT STYLE LIBRARY (schema.styles and schema.character_styles)
     # =========================
 
     def _register_out_style(
         self,
-        p_format: Dict[str, Any],
-        r_format: Dict[str, Any],
+        p_diff: Dict[str, Any],
+        r_diff: Dict[str, Any],
         source_word_style_id: Optional[str] = None
     ) -> str:
-        style_obj = {"p_format": p_format or {}, "r_format": r_format or {}}
+        style_obj = {"p_format": p_diff, "r_format": r_diff}
 
         # IMPORTANT: de-dup key must remain based ONLY on formatting (no metadata).
         key = _stable_json_key(style_obj)
@@ -490,37 +432,243 @@ class UltimateParserV41:
         self.out_styles[style_id] = style_obj
         return style_id
 
-    def _finalize_out_style_metadata(self, default_style_id: Optional[str]) -> None:
-        """
-        Stage 1: assign deterministic user-friendly titles and planned Word style ids.
-        - default style: title="Обычный"
-        - others: "Стиль 1", "Стиль 2", ... in style_id order (excluding default)
-        - word_style_id: "TF_<style_id>"
-        """
-        style_ids = sorted(self.out_styles.keys())
+    def _register_char_style(self, r_format: Dict[str, Any]) -> str:
+        key = _stable_json_key(r_format)
+        existing = self._char_key_to_id.get(key)
+        if existing:
+            return existing
 
-        # word_style_id for all styles
-        for sid in style_ids:
-            st = self.out_styles.get(sid)
-            if isinstance(st, dict) and st.get("word_style_id") is None:
-                st["word_style_id"] = f"TF_{sid}"
+        style_id = f"c{self._char_counter:04d}"
+        self._char_counter += 1
+        self._char_key_to_id[key] = style_id
+        self.out_char_styles[style_id] = {"r_format": r_format}
+        return style_id
 
-        # titles
-        if default_style_id is not None and default_style_id in self.out_styles:
-            st0 = self.out_styles.get(default_style_id)
-            if isinstance(st0, dict):
-                st0["title"] = "Обычный"
+    # =========================
+    # PUBLIC
+    # =========================
 
+    def process(self) -> str:
+        # Compute Normal effective formatting
+        normal_word_style_id = self._get_default_word_paragraph_style_id()  # usually "a"
+        if normal_word_style_id is None:
+            # Fallback: use built-in Normal defaults
+            self.normal_p_format = dict(NORMAL_P_FORMAT)
+            self.normal_r_format = dict(NORMAL_R_FORMAT)
+        else:
+            self.normal_p_format = self._effective_p_format(normal_word_style_id, None)
+            self.normal_r_format = self._effective_r_format(normal_word_style_id)
+
+        settings: Dict[str, Any] = {}
+        default_tab_stop = self._parse_default_tab_stop()
+        if default_tab_stop is not None:
+            settings["defaultTabStopTwip"] = default_tab_stop
+
+        numbering_definitions = self._parse_numbering_definitions()
+        self._implied_numpr_by_word_style = self._build_implied_numpr_by_word_style(numbering_definitions)
+
+        result: Dict[str, Any] = {
+            "meta": {
+                "schema_version": "2.9",
+                "rules_version": "0.3",
+                "producer": {
+                    "name": "UltimateParserV43",
+                    "version": "v43"
+                }
+            },
+            "document_info": {
+                "page_setup": self._parse_page_setup(),
+                "settings": settings
+            },
+            "numbering_definitions": numbering_definitions,
+            "styles": {},
+            "character_styles": {},
+            "content": []
+        }
+
+        body = self.document_xml.find(qn("w:body"))
+        default_word_style_id = self._get_default_word_paragraph_style_id()
+        paragraphs_count = 0
+        runs_count = 0
+
+        if body is None:
+            if default_word_style_id is not None:
+                default_p_format = self._effective_p_format(default_word_style_id, None)
+                default_r_format = self._effective_r_format(default_word_style_id)
+                p_diff = _dict_diff(self.normal_p_format, default_p_format)
+                r_diff = _dict_diff(self.normal_r_format, default_r_format)
+                default_style_id = self._register_out_style(p_diff, r_diff, source_word_style_id=default_word_style_id)
+                result["meta"]["default_style_id"] = default_style_id
+            self._finalize_styles(result)
+            result["styles"] = self.out_styles
+            result["character_styles"] = self.out_char_styles
+            print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} "
+                  f"styles_count={len(result['styles'])} char_styles_count={len(result['character_styles'])}")
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
+        for p in body.findall(qn("w:p")):
+            paragraphs_count += 1
+            pPr = p.find(qn("w:pPr"))
+            p_style_id = self._get_p_style_id(pPr)
+
+            # Effective paragraph formatting: docDefaults + style chain + direct pPr
+            eff_p = self._effective_p_format(p_style_id, pPr)
+
+            # Effective run formatting: docDefaults + style chain
+            eff_r_paragraph = self._effective_r_format(p_style_id)
+
+            # Paragraph mark rPr (direct pPr/rPr) – apply only for empty paragraphs (RULE-006)
+            para_mark_rPr = self._parse_rPr(pPr.find(qn("w:rPr")) if pPr is not None else None)
+
+            # Compute diff from Normal for this paragraph
+            p_diff = _dict_diff(self.normal_p_format, eff_p)
+            r_diff_paragraph = _dict_diff(self.normal_r_format, eff_r_paragraph)
+
+            runs = self._parse_runs(p, eff_r_paragraph)
+            runs_count += len(runs)
+
+            # RULE-006: empty paragraph -> include para_mark_rPr in r_format
+            if not runs:
+                full_r = _merge(eff_r_paragraph, para_mark_rPr)
+                r_diff_paragraph = _dict_diff(self.normal_r_format, full_r)
+
+            style_id = self._register_out_style(p_diff, r_diff_paragraph, source_word_style_id=p_style_id)
+
+            item: Dict[str, Any] = {"style_id": style_id, "runs": runs}
+            if p_style_id is not None:
+                item["source_word_style_id"] = p_style_id
+            result["content"].append(item)
+
+        if default_word_style_id is not None:
+            default_p_format = self._effective_p_format(default_word_style_id, None)
+            default_r_format = self._effective_r_format(default_word_style_id)
+            p_diff = _dict_diff(self.normal_p_format, default_p_format)
+            r_diff = _dict_diff(self.normal_r_format, default_r_format)
+            default_style_id = self._register_out_style(p_diff, r_diff, source_word_style_id=default_word_style_id)
+            result["meta"]["default_style_id"] = default_style_id
+
+        # Remap numbering pStyle to our word_style_id
+        self._remap_numbering_pstyles(numbering_definitions)
+
+        # Finalize style metadata
+        self._finalize_styles(result)
+        result["styles"] = self.out_styles
+        result["character_styles"] = self.out_char_styles
+
+        print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} "
+              f"styles_count={len(result['styles'])} char_styles_count={len(result['character_styles'])} "
+              f"paragraphs_count={paragraphs_count} runs_count={runs_count}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+    def _finalize_styles(self, result: Dict[str, Any]) -> None:
+        """Assign titles and word_style_id for all styles."""
+        para_ids = sorted(self.out_styles.keys())
+        char_ids = sorted(self.out_char_styles.keys())
+
+        # Titles for paragraph styles
+        default_id = result["meta"].get("default_style_id")
+        if default_id and default_id in self.out_styles:
+            self.out_styles[default_id]["title"] = "Обычный"
+
+        # Map source_word_style_id to localized heading names
+        heading_map = {
+            "1": "Заголовок 1",
+            "2": "Заголовок 2",
+            "3": "Заголовок 3",
+            "4": "Заголовок 4",
+            "5": "Заголовок 5",
+            "6": "Заголовок 6",
+            "7": "Заголовок 7",
+            "8": "Заголовок 8",
+            "9": "Заголовок 9",
+        }
+
+        # First pass: assign titles based on source_word_style_id for headings
+        for sid in para_ids:
+            if sid == default_id:
+                continue
+            st = self.out_styles.get(sid, {})
+            if st.get("title") is not None:
+                continue
+            src = st.get("source_word_style_id")
+            if src in heading_map:
+                st["title"] = heading_map[src]
+
+        # Second pass: assign "Стиль N" to remaining styles without title
         n = 1
-        for sid in style_ids:
-            if sid == default_style_id:
+        for sid in para_ids:
+            if sid == default_id:
                 continue
-            st = self.out_styles.get(sid)
-            if not isinstance(st, dict):
-                continue
+            st = self.out_styles.get(sid, {})
             if st.get("title") is None:
                 st["title"] = f"Стиль {n}"
                 n += 1
+
+        # Titles for character styles: "Символьный стиль N"
+        m = 1
+        for cid in char_ids:
+            st = self.out_char_styles.get(cid, {})
+            if st.get("title") is None:
+                st["title"] = f"Символьный стиль {m}"
+                m += 1
+
+        # word_style_id for paragraph styles:
+        # Use source_word_style_id if available and not taken, else generate TF_xxx
+        used_ids = set()
+        for sid, st in self.out_styles.items():
+            src = st.get("source_word_style_id")
+            if src and src not in used_ids and src not in ("a", "Normal"):
+                st["word_style_id"] = src
+                used_ids.add(src)
+            # else will be assigned later
+
+        for sid, st in self.out_styles.items():
+            if "word_style_id" not in st:
+                candidate = f"TF_{sid}"
+                # avoid collision (very unlikely)
+                while candidate in used_ids:
+                    candidate = f"TF_{sid}_{self._style_counter}"
+                st["word_style_id"] = candidate
+                used_ids.add(candidate)
+
+        # word_style_id for character styles: TF_cxxxx
+        for cid, st in self.out_char_styles.items():
+            candidate = f"TF_{cid}"
+            st["word_style_id"] = candidate
+            # no need to track collisions as they are separate
+
+    def _remap_numbering_pstyles(self, numbering_definitions: Dict[str, Any]) -> None:
+        """
+        Replace pStyle values in numbering_definitions with the corresponding word_style_id.
+        If a pStyle refers to a style not in our map, create a minimal paragraph style for it.
+        """
+        # First, collect all pStyle values from numbering
+        pstyle_vals = set()
+        for num_rec in numbering_definitions.values():
+            levels = num_rec.get("levels", {})
+            for lvl_rec in levels.values():
+                ps = lvl_rec.get("pStyle")
+                if ps and isinstance(ps, str):
+                    pstyle_vals.add(ps)
+
+        # Ensure each pstyle has a corresponding paragraph style
+        for ps in pstyle_vals:
+            # Check if any style has this source_word_style_id
+            found = any(st.get("source_word_style_id") == ps for st in self.out_styles.values())
+            if not found:
+                # Create minimal style (empty diff) with source_word_style_id=ps
+                style_id = self._register_out_style({}, {}, source_word_style_id=ps)
+
+        # Now replace pStyle in numbering_definitions with word_style_id
+        for num_rec in numbering_definitions.values():
+            levels = num_rec.get("levels", {})
+            for lvl_rec in levels.values():
+                ps = lvl_rec.get("pStyle")
+                if ps and isinstance(ps, str):
+                    for st in self.out_styles.values():
+                        if st.get("source_word_style_id") == ps:
+                            lvl_rec["pStyle"] = st.get("word_style_id", ps)
+                            break
 
     # =========================
     # DOCUMENT INFO
@@ -595,6 +743,12 @@ class UltimateParserV41:
                 c["equalWidth"] = equal not in ("0", "false", "off")
             if c:
                 out["cols"] = c
+
+        docGrid = sectPr.find(qn("w:docGrid"))
+        if docGrid is not None:
+            lp = _int_attr(docGrid, "linePitch")
+            if lp is not None:
+                out["linePitchTwip"] = lp
 
         return out
 
@@ -1022,9 +1176,9 @@ class UltimateParserV41:
 
     def _parse_runs(self, p: etree._Element, base_r_for_diff: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        RULE-004: do not merge runs during parsing:
-          - never combine content across different w:r
-          - within a single w:r, do NOT merge different w:t nodes
+        Parse runs and create character styles.
+        Instead of diff, we record char_style_id.
+        base_r_for_diff is the effective rPr of the paragraph (including Normal + style).
         """
         out: List[Dict[str, Any]] = []
         first_emitted = False  # for meta.leading on first tab
@@ -1034,8 +1188,7 @@ class UltimateParserV41:
                 continue
 
             rPr = child.find(qn("w:rPr"))
-            r_cur = self._parse_rPr(rPr)
-            r_diff = _run_local_r_diff(base_r_for_diff, r_cur)
+            run_local_r = self._parse_rPr(rPr)   # direct run formatting
 
             for node in child:
                 if node.tag == qn("w:rPr"):
@@ -1046,18 +1199,21 @@ class UltimateParserV41:
                     preserve = node.get(f"{{{XML_NS}}}space") == "preserve"
 
                     run_obj: Dict[str, Any] = {"type": "text", "text": txt}
-                    if r_diff:
-                        run_obj["diff"] = r_diff
+                    if run_local_r:
+                        char_style_id = self._register_char_style(run_local_r)
+                        run_obj["char_style_id"] = char_style_id
                     if preserve:
                         run_obj["meta"] = {"preserve": True}
 
                     out.append(run_obj)
-                    first_emitted = True
+                    if not first_emitted:
+                        first_emitted = True
 
                 elif node.tag == qn("w:tab"):
                     run_obj: Dict[str, Any] = {"type": "tab"}
-                    if r_diff:
-                        run_obj["diff"] = r_diff
+                    if run_local_r:
+                        char_style_id = self._register_char_style(run_local_r)
+                        run_obj["char_style_id"] = char_style_id
 
                     # ADD: first visual token is a tab -> meta.leading=true
                     if not first_emitted:
@@ -1071,15 +1227,17 @@ class UltimateParserV41:
                     br_type = node.get(f"{{{W_NS}}}type")
                     if br_type in ("textWrapping", "page", "column"):
                         run_obj["break_type"] = br_type
-                    if r_diff:
-                        run_obj["diff"] = r_diff
+                    if run_local_r:
+                        char_style_id = self._register_char_style(run_local_r)
+                        run_obj["char_style_id"] = char_style_id
                     out.append(run_obj)
                     first_emitted = True
 
                 elif node.tag == qn("w:cr"):
                     run_obj: Dict[str, Any] = {"type": "cr"}
-                    if r_diff:
-                        run_obj["diff"] = r_diff
+                    if run_local_r:
+                        char_style_id = self._register_char_style(run_local_r)
+                        run_obj["char_style_id"] = char_style_id
                     out.append(run_obj)
                     first_emitted = True
 
@@ -1087,8 +1245,9 @@ class UltimateParserV41:
                     font = node.get(f"{{{W_NS}}}font") or ""
                     char = node.get(f"{{{W_NS}}}char") or ""
                     run_obj: Dict[str, Any] = {"type": "sym", "text": _sym_encode(font, char)}
-                    if r_diff:
-                        run_obj["diff"] = r_diff
+                    if run_local_r:
+                        char_style_id = self._register_char_style(run_local_r)
+                        run_obj["char_style_id"] = char_style_id
                     out.append(run_obj)
                     first_emitted = True
 
@@ -1107,21 +1266,20 @@ class UltimateParserV41:
                 f.write(data)
 
 
-
 if __name__ == "__main__":
     try:
-        cli = argparse.ArgumentParser(description="UltimateParserV42 DOCX -> RAW JSON")
+        cli = argparse.ArgumentParser(description="UltimateParserV43 DOCX -> RAW JSON")
         cli.add_argument("--in", dest="input_docx", default=os.path.join(BASE_DIR, "donor_v2.6.docx"))
         cli.add_argument("--out", dest="out_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
         args = cli.parse_args()
 
-        parser = UltimateParserV41(args.input_docx)
+        parser = UltimateParserV43(args.input_docx)
 
         os.makedirs(os.path.dirname(args.out_json) or ".", exist_ok=True)
         with open(args.out_json, "w", encoding="utf-8") as f:
             f.write(parser.process())
 
-        print("Парсинг v4.1+ (lxml) завершен успешно!")
+        print("Парсинг v43 (с символьными стилями) завершен успешно!")
     except Exception:
         import traceback
         traceback.print_exc()

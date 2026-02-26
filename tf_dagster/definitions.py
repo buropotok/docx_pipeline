@@ -5,6 +5,7 @@ from .assets import (
     saveas_materialized,
     parse_raw_json,
     materialize_effective,
+    optimize_tabs,          # новый asset
     reconstruct_docx,
 )
 
@@ -15,6 +16,7 @@ full_run_job = define_asset_job(
         "saveas_materialized",
         "parse_raw_json",
         "materialize_effective",
+        "optimize_tabs",      # добавлен в job
         "reconstruct_docx",
     ),
 )
@@ -25,6 +27,7 @@ defs = Definitions(
         saveas_materialized,
         parse_raw_json,
         materialize_effective,
+        optimize_tabs,        # добавлен в список
         reconstruct_docx,
     ],
     jobs=[full_run_job],
