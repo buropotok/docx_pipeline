@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Standard RAW JSON Schema v2.9 (with Normal base and character styles)",
+  "title": "Standard RAW JSON Schema v2.10 (with run IDs and fingerprint support)",
   "type": "object",
   "required": ["meta", "document_info", "numbering_definitions", "styles", "character_styles", "content"],
   "additionalProperties": false,
@@ -152,8 +152,13 @@
     "run": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": ["type", "id"],
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор run в формате run_N, где N - целое число (1-based)"
+        },
+
         "type": {
           "type": "string",
           "enum": [
@@ -202,7 +207,10 @@
       "additionalProperties": false,
       "required": ["schema_version", "rules_version"],
       "properties": {
-        "schema_version": { "type": "string" },
+        "schema_version": {
+          "type": "string",
+          "enum": ["2.10"]
+        },
         "rules_version": { "type": "string" },
         "default_style_id": { "type": "string" },
         "producer": {
@@ -212,6 +220,10 @@
             "name": { "type": "string" },
             "version": { "type": "string" }
           }
+        },
+        "run_id_counter_start": {
+          "type": "integer",
+          "description": "Начальное значение счётчика run_id (обычно 1)"
         }
       }
     },
@@ -355,6 +367,7 @@
         "properties": {
           "style_id": { "type": "string" },
           "source_word_style_id": { "type": "string" },
+          "p_format": { "$ref": "#/$defs/pFormat" },
           "runs": {
             "type": "array",
             "items": { "$ref": "#/$defs/run" }

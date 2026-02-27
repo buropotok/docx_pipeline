@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "required": ["paragraph_index", "segments"],
+  "properties": {
+    "paragraph_index": {"type": "integer"},
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "class", "role", "text", "sources"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Новый идентификатор run'а для этого сегмента",
+            "pattern": "^run_[0-9]+(\\.[0-9]+)?$"
+          },
+          "class": {
+            "type": "string",
+            "enum": ["template_static", "issuer_profile", "document_dynamic", "ambiguous"]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "field_label", "field_value", "heading", "issuer_name",
+              "issuer_address", "issuer_contact", "issuer_requisite",
+              "person_name", "person_id", "date", "registry_number",
+              "note_header", "note_body", "signature_label",
+              "signer_name", "signer_position", "seal_label",
+              "seal_text", "other"
+            ]
+          },
+          "text": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "description": "Ссылки на исходные run'ы, из которых извлечён текст",
+            "items": {
+              "type": "object",
+              "required": ["run_id", "start", "end"],
+              "properties": {
+                "run_id": {"type": "string"},
+                "start": {"type": "integer", "minimum": 0},
+                "end": {"type": "integer", "minimum": 0}
+              }
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}
