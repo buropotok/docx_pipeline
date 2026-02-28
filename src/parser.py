@@ -22,7 +22,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from lxml import etree
-
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from parser_picture import parse_picture_node
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
@@ -208,6 +210,22 @@ class UltimateParserV43:
 
             self.document_xml = etree.fromstring(z.read("word/document.xml"))
 
+            # Загрузка отношений документа (document.xml.rels)
+            self.relationships = {}
+            try:
+                rels_data = z.read("word/_rels/document.xml.rels")
+                rels_xml = etree.fromstring(rels_data)
+                # Пространство имён для отношений
+                rels_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+                for rel in rels_xml.findall(f"{{{rels_ns}}}Relationship"):
+                    r_id = rel.get("Id")
+                    target = rel.get("Target")
+                    if r_id and target:
+                        self.relationships[r_id] = target
+            except KeyError:
+                # Если файла отношений нет, оставляем пустой словарь
+                pass
+
             try:
                 self.styles_xml = etree.fromstring(z.read("word/styles.xml"))
             except KeyError:
@@ -232,6 +250,9 @@ class UltimateParserV43:
         self.out_char_styles: Dict[str, Dict[str, Any]] = {}
         self._char_key_to_id: Dict[str, str] = {}
         self._char_counter: int = 1
+
+        # Счётчик для run_id
+        self._run_counter = 1
 
         # Word styles (for effective formatting)
         self.doc_defaults_r: Dict[str, Any] = {}
@@ -469,7 +490,7 @@ class UltimateParserV43:
 
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.9",
+                "schema_version": "2.11",
                 "rules_version": "0.3",
                 "producer": {
                     "name": "UltimateParserV43",
@@ -1199,6 +1220,8 @@ class UltimateParserV43:
                     preserve = node.get(f"{{{XML_NS}}}space") == "preserve"
 
                     run_obj: Dict[str, Any] = {"type": "text", "text": txt}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
                     if run_local_r:
                         char_style_id = self._register_char_style(run_local_r)
                         run_obj["char_style_id"] = char_style_id
@@ -1211,6 +1234,8 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:tab"):
                     run_obj: Dict[str, Any] = {"type": "tab"}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
                     if run_local_r:
                         char_style_id = self._register_char_style(run_local_r)
                         run_obj["char_style_id"] = char_style_id
@@ -1224,6 +1249,8 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:br"):
                     run_obj: Dict[str, Any] = {"type": "break"}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
                     br_type = node.get(f"{{{W_NS}}}type")
                     if br_type in ("textWrapping", "page", "column"):
                         run_obj["break_type"] = br_type
@@ -1235,6 +1262,8 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:cr"):
                     run_obj: Dict[str, Any] = {"type": "cr"}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
                     if run_local_r:
                         char_style_id = self._register_char_style(run_local_r)
                         run_obj["char_style_id"] = char_style_id
@@ -1245,12 +1274,26 @@ class UltimateParserV43:
                     font = node.get(f"{{{W_NS}}}font") or ""
                     char = node.get(f"{{{W_NS}}}char") or ""
                     run_obj: Dict[str, Any] = {"type": "sym", "text": _sym_encode(font, char)}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
                     if run_local_r:
                         char_style_id = self._register_char_style(run_local_r)
                         run_obj["char_style_id"] = char_style_id
                     out.append(run_obj)
                     first_emitted = True
 
+                elif node.tag == qn("w:drawing") or node.tag == qn("w:pict"):
+                    # Обработка изображения
+                    run_id = f"run_{self._run_counter}"
+                    self._run_counter += 1
+                    pic_data = parse_picture_node(node, run_id, self.relationships)
+                    if pic_data:
+                        # Добавляем char_style_id, если есть локальное форматирование
+                        if run_local_r:
+                            char_style_id = self._register_char_style(run_local_r)
+                            pic_data["char_style_id"] = char_style_id
+                        out.append(pic_data)
+                        first_emitted = True
                 else:
                     # ignore unsupported nodes for "forms" subset
                     continue

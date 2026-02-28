@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Standard RAW JSON Schema v2.10 (with run IDs and fingerprint support)",
+  "title": "Standard RAW JSON Schema v2.11 (with picture support)",
   "type": "object",
   "required": ["meta", "document_info", "numbering_definitions", "styles", "character_styles", "content"],
   "additionalProperties": false,
@@ -168,8 +168,10 @@
             "sym",
             "cr",
             "softHyphen",
-            "noBreakHyphen"
-          ]
+            "noBreakHyphen",
+            "picture"
+          ],
+          "description": "Тип элемента. picture — изображение, встраиваемое в документ"
         },
 
         "text": { "type": "string" },
@@ -185,6 +187,30 @@
             "leading": { "type": "boolean" },
             "preserve": { "type": "boolean" }
           }
+        },
+
+        "file": {
+          "type": "string",
+          "description": "Относительный путь к файлу изображения внутри папки media (например, 'image1.png')"
+        },
+
+        "description": {
+          "type": "string",
+          "description": "Альтернативный текст изображения (alt)"
+        },
+
+        "extent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cx": { "type": "integer", "description": "Ширина в твипах" },
+            "cy": { "type": "integer", "description": "Высота в твипах" }
+          }
+        },
+
+        "relation_id": {
+          "type": "string",
+          "description": "Идентификатор отношения (rId) для ссылки на изображение из document.xml.rels"
         }
       },
 
@@ -196,6 +222,10 @@
         {
           "if": { "properties": { "type": { "const": "sym" } } },
           "then": { "required": ["text"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "picture" } } },
+          "then": { "required": ["file"] }
         }
       ]
     }
@@ -209,7 +239,7 @@
       "properties": {
         "schema_version": {
           "type": "string",
-          "enum": ["2.10"]
+          "enum": ["2.11"]
         },
         "rules_version": { "type": "string" },
         "default_style_id": { "type": "string" },

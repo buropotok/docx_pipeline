@@ -21,7 +21,9 @@ import zipfile
 from typing import Any, Dict, Optional, List, Tuple
 
 from lxml import etree
-
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from reconstructor_picture import add_picture_to_document
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -158,6 +160,11 @@ class UltimateReconstructorV12:
         # Build map for numbering pStyle replacement (if needed)
         self._prepare_numbering_pstyles()
 
+        # Для работы с изображениями
+        self.relationships: Dict[str, str] = {}  # будет заполняться при добавлении картинок
+        self.next_rel_id = 4  # счётчик для новых отношений
+        self.donor_media_path: Optional[str] = None  # установим позже
+
         unsupported_run_types = []
         for p_item in self.content:
             for run in (p_item.get("runs") or []):
@@ -199,6 +206,15 @@ class UltimateReconstructorV12:
 
     def build_docx(self, out_docx_path: str) -> None:
         package_files: Dict[str, bytes] = {}
+        self.package_files = package_files
+
+        # Определяем donor_media_path до вызова _build_document_xml
+        run_dir = os.path.dirname(os.path.dirname(self.raw_json_path))  # поднимаемся из out в корень run
+        donor_raw_dir = os.path.join(run_dir, "raw", "donor")
+        self.donor_media_path = os.path.join(donor_raw_dir, "word", "media")
+        if not os.path.exists(self.donor_media_path):
+            self.donor_media_path = None
+        print(f"[recon] donor_media_path = {self.donor_media_path}")
 
         styles_xml = self._build_styles_xml()
         document_xml = self._build_document_xml()
@@ -209,7 +225,8 @@ class UltimateReconstructorV12:
         doc_rels = self._build_document_rels(
             has_numbering=bool(self.numbering_definitions),
             has_styles=True,
-            has_settings=True
+            has_settings=True,
+            image_rels = self.relationships
         )
         content_types = self._build_content_types(
             has_numbering=bool(self.numbering_definitions),
@@ -237,6 +254,7 @@ class UltimateReconstructorV12:
             for name in sorted(package_files.keys()):
                 z.writestr(name, package_files[name])
 
+        print("[recon] package_files keys:", list(package_files.keys()))
     # =========================
     # BUILD: document.xml
     # =========================
@@ -275,7 +293,9 @@ class UltimateReconstructorV12:
             for run in runs:
                 r = _w_sub(p, "r")
                 rtype = run.get("type")
-
+                print(f"[recon] processing run id={run.get('id')}, type={rtype}")
+                if rtype == "picture":
+                    print(f"[recon] FOUND PICTURE: {run}")
                 # Run properties: if char_style_id present, add rStyle
                 char_style_id = run.get("char_style_id")
                 if char_style_id:
@@ -311,6 +331,28 @@ class UltimateReconstructorV12:
                     if _needs_xml_preserve(sym_text):
                         t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
                     t.text = sym_text
+
+                elif rtype == "picture":
+                    if self.donor_media_path is None:
+                        continue
+                    r_pic = _w_sub(p, "r")
+                    # Если есть char_style_id, добавим rStyle
+                    char_style_id = run.get("char_style_id")
+                    if char_style_id:
+                        rPr_el = _w_sub(r_pic, "rPr")
+                        rStyle = _w_sub(rPr_el, "rStyle")
+                        word_id = self.style_id_to_word.get(char_style_id, char_style_id)
+                        _set_w_attr(rStyle, "val", word_id)
+
+                    # Вызываем функцию для добавления drawing
+                    self.next_rel_id = add_picture_to_document(
+                        run_data=run,
+                        parent_element=r_pic,  # исправлено
+                        relationships=self.relationships,
+                        package_files=self.package_files,
+                        donor_media_path=self.donor_media_path,
+                        next_rel_id=self.next_rel_id
+                    )
 
                 else:
                     # unsupported run types (softHyphen, noBreakHyphen) – ignore
@@ -852,7 +894,8 @@ class UltimateReconstructorV12:
 
         return rels
 
-    def _build_document_rels(self, has_numbering: bool, has_styles: bool, has_settings: bool) -> etree._Element:
+    def _build_document_rels(self, has_numbering: bool, has_styles: bool, has_settings: bool,
+                             image_rels: Dict[str, str]) -> etree._Element:
         rels = etree.Element(f"{{{PR_NS}}}Relationships", nsmap={None: PR_NS})
 
         rid = 1
@@ -876,6 +919,17 @@ class UltimateReconstructorV12:
             rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings")
             rel.set("Target", "settings.xml")
             rid += 1
+
+        # images
+        for r_id, target in (image_rels or {}).items():
+            rel = etree.SubElement(rels, f"{{{PR_NS}}}Relationship")
+            rel.set("Id", r_id)
+            rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+            # normalize Target
+            t = (target or "").lstrip("/")
+            if t.startswith("word/"):
+                t = t[len("word/"):]
+            rel.set("Target", t)
 
         return rels
 
@@ -910,6 +964,36 @@ class UltimateReconstructorV12:
             o = etree.SubElement(types, f"{{{CT_NS}}}Override")
             o.set("PartName", "/word/settings.xml")
             o.set("ContentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml")
+
+        # Images: defaults per extension used (deterministic), fail-fast on unknown extensions
+        mime_map = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".bmp": "image/bmp",
+            ".tif": "image/tiff",
+            ".tiff": "image/tiff",
+            ".wmf": "image/x-wmf",
+            ".emf": "image/x-emf",
+        }
+
+        added = set()
+        for target in (self.relationships or {}).values():
+            t = (target or "").lstrip("/")
+            if t.startswith("word/"):
+                t = t[len("word/"):]
+            ext = os.path.splitext(t)[1].lower()
+            if not ext or ext in added:
+                continue
+            ct = mime_map.get(ext)
+            if not ct:
+                raise ValueError(
+                    f"Contract violation: unsupported image extension for content types: {ext} (target={t})")
+            d = etree.SubElement(types, f"{{{CT_NS}}}Default")
+            d.set("Extension", ext.lstrip("."))
+            d.set("ContentType", ct)
+            added.add(ext)
 
         return types
 

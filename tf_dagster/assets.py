@@ -192,11 +192,27 @@ def optimize_tabs(context: AssetExecutionContext, input_docx_path: str) -> Outpu
     )
 
 @asset(non_argument_deps={"optimize_tabs"})
-def reconstruct_docx(context: AssetExecutionContext, input_docx_path: str) -> Output[Nothing]:
+def reconstruct_docx_opt(context: AssetExecutionContext, input_docx_path: str) -> Output[Nothing]:
     p = _mk_run_paths(context, Path(input_docx_path))
     py = sys.executable
 
     _run_cmd(context, [py, "src/reconstructor.py", "--in-json", str(p.optimized_json), "--out-docx", str(p.reconstructed_docx)], "recon")
+    _extract_docx_raw(context, p.reconstructed_docx, p.raw_reconstructed, "raw_reconstructed")
+
+    return Output(
+        value=None,
+        metadata={
+            "reconstructed_docx": MetadataValue.path(str(p.reconstructed_docx)),
+            "raw_reconstructed_dir": MetadataValue.path(str(p.raw_reconstructed)),
+        },
+    )
+
+@asset(non_argument_deps={"materialize_effective"})
+def reconstruct_docx(context: AssetExecutionContext, input_docx_path: str) -> Output[Nothing]:
+    p = _mk_run_paths(context, Path(input_docx_path))
+    py = sys.executable
+
+    _run_cmd(context, [py, "src/reconstructor.py", "--in-json", str(p.effective_json), "--out-docx", str(p.reconstructed_docx)], "recon")
     _extract_docx_raw(context, p.reconstructed_docx, p.raw_reconstructed, "raw_reconstructed")
 
     return Output(
