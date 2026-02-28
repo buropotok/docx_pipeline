@@ -1,165 +1,242 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Standard RAW JSON Schema v2.11 (with picture support)",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://translatefactory/schema/raw/2.12",
+  "title": "Standard RAW JSON Schema v2.12 (Word styles imported + run overrides)",
+  "version": "2.12",
   "type": "object",
-  "required": ["meta", "document_info", "numbering_definitions", "styles", "character_styles", "content"],
+  "required": [
+    "meta",
+    "document_info",
+    "numbering_definitions",
+    "doc_defaults",
+    "styles",
+    "content"
+  ],
   "additionalProperties": false,
-
   "$defs": {
     "alignmentEnum": {
       "type": "string",
-      "enum": ["LEFT", "CENTER", "RIGHT", "JUSTIFY"]
+      "enum": [
+        "left",
+        "center",
+        "right",
+        "justify",
+        "distribute"
+      ]
     },
-
-    "lineRuleEnum": {
-      "type": "string",
-      "enum": ["AUTO", "AT_LEAST", "EXACT"]
-    },
-
-    "textAlignmentEnum": {
-      "type": "string",
-      "enum": ["AUTO", "BASELINE", "TOP", "CENTER", "BOTTOM"]
-    },
-
     "breakTypeEnum": {
       "type": "string",
-      "enum": ["textWrapping", "page", "column"]
+      "enum": [
+        "page",
+        "column",
+        "textWrapping",
+        "line"
+      ]
     },
-
+    "lineRuleEnum": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "exact",
+        "atLeast"
+      ]
+    },
     "numberingRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["numId", "ilvl"],
       "properties": {
-        "numId": { "type": "string" },
-        "ilvl": { "type": "integer", "minimum": 0 }
-      }
-    },
-
-    "tabStop": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["posTwip", "val"],
-      "properties": {
-        "posTwip": { "type": "integer", "minimum": 0 },
-        "val": {
-          "type": "string",
-          "enum": ["left", "center", "right", "decimal", "bar", "clear"]
+        "numId": {
+          "description": "Идентификатор списка (w:numId/@w:val).",
+          "type": "string"
         },
-        "leader": {
-          "type": "string",
-          "enum": ["none", "dot", "hyphen", "underscore", "heavy", "middleDot"]
+        "ilvl": {
+          "description": "Уровень (w:ilvl/@w:val).",
+          "type": "string"
         }
-      }
+      },
+      "required": [
+        "numId",
+        "ilvl"
+      ]
     },
-
-    "rFonts": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "ascii": { "type": "string" },
-        "hAnsi": { "type": "string" },
-        "eastAsia": { "type": "string" },
-        "cs": { "type": "string" },
-        "asciiTheme": { "type": "string" },
-        "hAnsiTheme": { "type": "string" },
-        "eastAsiaTheme": { "type": "string" },
-        "csTheme": { "type": "string" }
-      }
-    },
-
     "pFormat": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "alignment": { "$ref": "#/$defs/alignmentEnum" },
-
-        "indentStartTwip": { "type": "integer" },
-        "indentEndTwip": { "type": "integer" },
-        "indentFirstLineTwip": { "type": "integer" },
-        "indentHangingTwip": { "type": "integer" },
-
-        "spaceBeforeTwip": { "type": "integer" },
-        "spaceAfterTwip": { "type": "integer" },
-        "spaceBeforeLines": { "type": "integer" },
-        "spaceAfterLines": { "type": "integer" },
-
-        "beforeAutospacing": { "type": "boolean" },
-        "afterAutospacing": { "type": "boolean" },
-
-        "lineTwip": { "type": "integer" },
-        "lineRule": { "$ref": "#/$defs/lineRuleEnum" },
-
-        "linePitchTwip": { "type": "integer" },
-
-        "textAlignment": { "$ref": "#/$defs/textAlignmentEnum" },
-
-        "contextualSpacing": { "type": "boolean" },
-
-        "keepNext": { "type": "boolean" },
-        "keepLines": { "type": "boolean" },
-        "pageBreakBefore": { "type": "boolean" },
-        "widowControl": { "type": "boolean" },
-
-        "snapToGrid": { "type": "boolean" },
-
-        "tabs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/tabStop" }
+        "alignment": {
+          "$ref": "#/$defs/alignmentEnum"
         },
-
-        "numbering": { "$ref": "#/$defs/numberingRef" }
+        "text_alignment": {
+          "$ref": "#/$defs/textAlignmentEnum"
+        },
+        "line_spacing_twip": {
+          "description": "Интервал между строками (w:spacing/@w:line) в твипах.",
+          "type": "integer"
+        },
+        "line_rule": {
+          "$ref": "#/$defs/lineRuleEnum"
+        },
+        "space_before_twip": {
+          "description": "Интервал перед абзацем (w:spacing/@w:before) в твипах.",
+          "type": "integer"
+        },
+        "space_after_twip": {
+          "description": "Интервал после абзаца (w:spacing/@w:after) в твипах.",
+          "type": "integer"
+        },
+        "indent_start_twip": {
+          "description": "Отступ слева (w:ind/@w:start) в твипах.",
+          "type": "integer"
+        },
+        "indent_end_twip": {
+          "description": "Отступ справа (w:ind/@w:end) в твипах.",
+          "type": "integer"
+        },
+        "indent_first_line_twip": {
+          "description": "Отступ первой строки (w:ind/@w:firstLine) в твипах.",
+          "type": "integer"
+        },
+        "indent_hanging_twip": {
+          "description": "Висячий отступ (w:ind/@w:hanging) в твипах.",
+          "type": "integer"
+        },
+        "keep_next": {
+          "description": "Keep with next (w:keepNext).",
+          "type": "boolean"
+        },
+        "keep_lines": {
+          "description": "Keep lines together (w:keepLines).",
+          "type": "boolean"
+        },
+        "page_break_before": {
+          "description": "Page break before (w:pageBreakBefore).",
+          "type": "boolean"
+        },
+        "widow_control": {
+          "description": "Widow control (w:widowControl).",
+          "type": "boolean"
+        },
+        "tabs": {
+          "description": "Список табуляций (w:tabs).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tabStop"
+          }
+        },
+        "list_info": {
+          "description": "Привязка к нумерации (w:numPr).",
+          "$ref": "#/$defs/numberingRef"
+        }
       }
     },
-
+    "rFonts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ascii": {
+          "type": "string"
+        },
+        "hAnsi": {
+          "type": "string"
+        },
+        "eastAsia": {
+          "type": "string"
+        },
+        "cs": {
+          "type": "string"
+        },
+        "asciiTheme": {
+          "type": "string"
+        },
+        "hAnsiTheme": {
+          "type": "string"
+        },
+        "eastAsiaTheme": {
+          "type": "string"
+        },
+        "csTheme": {
+          "type": "string"
+        }
+      }
+    },
     "rFormat": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "rFonts": { "$ref": "#/$defs/rFonts" },
-
-        "font_size_half_points": { "type": "integer" },
-
-        "bold": { "type": "boolean" },
-        "italic": { "type": "boolean" },
-        "underline": { "type": "string" },
-
-        "color": { "type": "string" },
-
-        "vertical_align": {
-          "type": "string",
-          "enum": ["baseline", "superscript", "subscript"]
+        "bold": {
+          "type": "boolean"
         },
-
-        "all_caps": { "type": "boolean" },
-
-        "charSpacingTwip": { "type": "integer" },
-
-        "positionHalfPoints": { "type": "integer" },
-
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "description": "Подчеркивание (упрощённо). Рекомендуется расширить до объекта при добавлении themeColor и др.",
+          "type": "string"
+        },
+        "strike": {
+          "type": "boolean"
+        },
+        "double_strike": {
+          "type": "boolean"
+        },
+        "caps": {
+          "type": "boolean"
+        },
+        "small_caps": {
+          "type": "boolean"
+        },
+        "color": {
+          "description": "Цвет текста (упрощённо). Может быть расширен до объекта (val/themeColor/tint/shade).",
+          "type": "string"
+        },
+        "highlight": {
+          "type": "string"
+        },
+        "shading": {
+          "type": "string"
+        },
+        "vert_align": {
+          "description": "vertical alignment (w:vertAlign): superscript/subscript.",
+          "type": "string"
+        },
+        "font_size_half_points": {
+          "description": "Размер шрифта в half-points (w:sz/@w:val). 24 => 12pt.",
+          "type": "integer"
+        },
+        "rFonts": {
+          "$ref": "#/$defs/rFonts"
+        },
         "lang": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "val": { "type": "string" },
-            "eastAsia": { "type": "string" },
-            "bidi": { "type": "string" }
-          }
+          "type": "string"
+        },
+        "spacing_twip": {
+          "description": "Межбуквенный интервал (w:spacing) в твипах.",
+          "type": "integer"
+        },
+        "kern_half_points": {
+          "description": "Кернинг (w:kern) в half-points.",
+          "type": "integer"
+        },
+        "position_half_points": {
+          "description": "Смещение (w:position) в half-points.",
+          "type": "integer"
+        },
+        "szCs_half_points": {
+          "description": "Размер для complex script (w:szCs) в half-points.",
+          "type": "integer"
         }
       }
     },
-
     "run": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id"],
+      "required": [
+        "type",
+        "id"
+      ],
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Уникальный идентификатор run в формате run_N, где N - целое число (1-based)"
-        },
-
         "type": {
+          "description": "Тип элемента. picture — изображение, встраиваемое в документ",
           "type": "string",
           "enum": [
             "text",
@@ -170,94 +247,157 @@
             "softHyphen",
             "noBreakHyphen",
             "picture"
-          ],
-          "description": "Тип элемента. picture — изображение, встраиваемое в документ"
+          ]
         },
-
-        "text": { "type": "string" },
-
-        "char_style_id": { "type": "string" },
-
-        "break_type": { "$ref": "#/$defs/breakTypeEnum" },
-
+        "id": {
+          "description": "Уникальный идентификатор run в формате run_N, где N - целое число (1-based)",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "break_type": {
+          "$ref": "#/$defs/breakTypeEnum"
+        },
         "meta": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "leading": { "type": "boolean" },
-            "preserve": { "type": "boolean" }
+            "preserve": {
+              "type": "boolean"
+            },
+            "leading": {
+              "type": "boolean"
+            }
           }
         },
-
+        "r_style_id": {
+          "type": "string",
+          "description": "Character styleId (w:rStyle/@w:val) — ключ в styles."
+        },
+        "r_format": {
+          "$ref": "#/$defs/rFormat",
+          "description": "Inline override для run properties (w:rPr), поверх стиля. Использовать вместо синтетических character_styles."
+        },
+        "char_style_id": {
+          "type": "string",
+          "description": "[DEPRECATED] Синтетический символьный стиль. Используйте r_style_id."
+        },
         "file": {
           "type": "string",
-          "description": "Относительный путь к файлу изображения внутри папки media (например, 'image1.png')"
+          "description": "Относительный путь Target к изображению относительно word/document.xml (обычно 'media/<name.ext>')."
         },
-
-        "description": {
+        "relation_id": {
           "type": "string",
-          "description": "Альтернативный текст изображения (alt)"
+          "description": "Идентификатор отношения (rId) для ссылки на изображение из document.xml.rels"
         },
-
         "extent": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "cx": { "type": "integer", "description": "Ширина в твипах" },
-            "cy": { "type": "integer", "description": "Высота в твипах" }
+            "cx": {
+              "type": "integer",
+              "description": "Ширина в EMU (для wp:extent/a:ext)."
+            },
+            "cy": {
+              "type": "integer",
+              "description": "Высота в EMU (для wp:extent/a:ext)."
+            }
           }
         },
-
-        "relation_id": {
+        "description": {
           "type": "string",
-          "description": "Идентификатор отношения (rId) для ссылки на изображение из document.xml.rels"
+          "description": "Альтернативный текст изображения (alt)"
         }
       },
-
       "allOf": [
         {
-          "if": { "properties": { "type": { "const": "text" } } },
-          "then": { "required": ["text"] }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "text"
+            ]
+          }
         },
         {
-          "if": { "properties": { "type": { "const": "sym" } } },
-          "then": { "required": ["text"] }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "sym"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "text"
+            ]
+          }
         },
         {
-          "if": { "properties": { "type": { "const": "picture" } } },
-          "then": { "required": ["file"] }
+          "if": {
+            "properties": {
+              "type": {
+                "const": "picture"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "file"
+            ]
+          }
         }
+      ]
+    },
+    "tabStop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "posTwip": {
+          "type": "integer"
+        },
+        "val": {
+          "type": "string"
+        },
+        "leader": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "posTwip",
+        "val"
+      ]
+    },
+    "textAlignmentEnum": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "baseline",
+        "top",
+        "center",
+        "bottom"
       ]
     }
   },
-
   "properties": {
     "meta": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "rules_version"],
       "properties": {
+        "source_file": {
+          "type": "string"
+        },
         "schema_version": {
-          "type": "string",
-          "enum": ["2.11"]
-        },
-        "rules_version": { "type": "string" },
-        "default_style_id": { "type": "string" },
-        "producer": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": { "type": "string" },
-            "version": { "type": "string" }
-          }
-        },
-        "run_id_counter_start": {
-          "type": "integer",
-          "description": "Начальное значение счётчика run_id (обычно 1)"
+          "type": "string"
         }
       }
     },
-
     "document_info": {
       "type": "object",
       "additionalProperties": false,
@@ -266,78 +406,144 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "pageWidthTwip": { "type": "integer" },
-            "pageHeightTwip": { "type": "integer" },
-            "orient": { "type": "string", "enum": ["portrait", "landscape"] },
-            "marginLeftTwip": { "type": "integer" },
-            "marginRightTwip": { "type": "integer" },
-            "marginTopTwip": { "type": "integer" },
-            "marginBottomTwip": { "type": "integer" },
-            "headerTwip": { "type": "integer" },
-            "footerTwip": { "type": "integer" },
-            "gutterTwip": { "type": "integer" },
+            "pageWidthTwip": {
+              "type": "integer"
+            },
+            "pageHeightTwip": {
+              "type": "integer"
+            },
+            "orient": {
+              "type": "string",
+              "enum": [
+                "portrait",
+                "landscape"
+              ]
+            },
+            "marginTopTwip": {
+              "type": "integer"
+            },
+            "marginBottomTwip": {
+              "type": "integer"
+            },
+            "marginLeftTwip": {
+              "type": "integer"
+            },
+            "marginRightTwip": {
+              "type": "integer"
+            },
+            "headerTwip": {
+              "type": "integer"
+            },
+            "footerTwip": {
+              "type": "integer"
+            },
+            "gutterTwip": {
+              "type": "integer"
+            },
             "cols": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "num": { "type": "integer", "minimum": 1 },
-                "spaceTwip": { "type": "integer" },
-                "equalWidth": { "type": "boolean" }
+                "num": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "spaceTwip": {
+                  "type": "integer"
+                },
+                "equalWidth": {
+                  "type": "boolean"
+                }
               }
             }
           }
         },
-
         "settings": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "defaultTabStopTwip": { "type": "integer" }
+            "defaultTabStopTwip": {
+              "type": "integer"
+            }
           }
         }
       }
     },
-
     "numbering_definitions": {
       "type": "object",
       "description": "Справочник нумерации: ключ = numId (string).",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["levels"],
+        "required": [
+          "levels"
+        ],
         "properties": {
-          "abstractNumId": { "type": "string" },
-          "multiLevelType": { "type": "string" },
+          "abstractNumId": {
+            "type": "string"
+          },
+          "multiLevelType": {
+            "type": "string"
+          },
           "levels": {
             "type": "object",
             "description": "Ключ = ilvl (string).",
             "additionalProperties": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["format", "template"],
+              "required": [
+                "format",
+                "template"
+              ],
               "properties": {
-                "format": { "type": "string" },
-                "template": { "type": "string" },
-                "start": { "type": "integer" },
-                "tabPosTwip": { "type": "integer" },
-                "lvlJc": { "type": "string" },
-                "suff": { "type": "string" },
-                "pStyle": { "type": "string" },
+                "format": {
+                  "type": "string"
+                },
+                "template": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer"
+                },
+                "lvlJc": {
+                  "type": "string"
+                },
+                "suff": {
+                  "type": "string"
+                },
+                "tabPosTwip": {
+                  "type": "integer"
+                },
+                "pStyle": {
+                  "type": "string"
+                },
+                "level_rPr": {
+                  "$ref": "#/$defs/rFormat"
+                },
                 "level_pPr": {
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "indentStartTwip": { "type": "integer" },
-                    "indentEndTwip": { "type": "integer" },
-                    "indentFirstLineTwip": { "type": "integer" },
-                    "indentHangingTwip": { "type": "integer" },
+                    "indentStartTwip": {
+                      "type": "integer"
+                    },
+                    "indentEndTwip": {
+                      "type": "integer"
+                    },
+                    "indentFirstLineTwip": {
+                      "type": "integer"
+                    },
+                    "indentHangingTwip": {
+                      "type": "integer"
+                    },
                     "tabs": {
                       "type": "array",
-                      "items": { "$ref": "#/$defs/tabStop" }
+                      "items": {
+                        "$ref": "#/$defs/tabStop"
+                      }
                     }
                   }
-                },
-                "level_rPr": { "$ref": "#/$defs/rFormat" }
+                }
               }
             }
           },
@@ -348,59 +554,185 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "start": { "type": "integer" }
+                "start": {
+                  "type": "integer"
+                }
               }
             }
           }
         }
       }
     },
-
+    "doc_defaults": {
+      "type": "object",
+      "description": "Нормы форматирования документа из styles.xml/w:docDefaults (основа для всех стилей).",
+      "additionalProperties": false,
+      "required": [
+        "p_format",
+        "r_format"
+      ],
+      "properties": {
+        "p_format": {
+          "$ref": "#/$defs/pFormat"
+        },
+        "r_format": {
+          "$ref": "#/$defs/rFormat"
+        }
+      }
+    },
+    "latent_styles": {
+      "type": "object",
+      "description": "Нормализованные настройки w:latentStyles (если присутствуют в styles.xml).",
+      "additionalProperties": false,
+      "properties": {
+        "defaultLockedState": {
+          "type": "boolean"
+        },
+        "defaultSemiHiddenState": {
+          "type": "boolean"
+        },
+        "defaultUnhideWhenUsedState": {
+          "type": "boolean"
+        },
+        "defaultQFormatState": {
+          "type": "boolean"
+        },
+        "defaultUiPriority": {
+          "type": "integer"
+        },
+        "exceptions": {
+          "type": "object",
+          "description": "Исключения по конкретным styleId.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "locked": {
+                "type": "boolean"
+              },
+              "semiHidden": {
+                "type": "boolean"
+              },
+              "unhideWhenUsed": {
+                "type": "boolean"
+              },
+              "qFormat": {
+                "type": "boolean"
+              },
+              "uiPriority": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
     "styles": {
       "type": "object",
-      "description": "Библиотека параграфных стилей (p_format + r_format). Ключ = style_id.",
+      "description": "Библиотека стилей, импортированных из word/styles.xml. Ключ = word styleId (например 'Normal', 'Heading1', 'a').",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["p_format", "r_format"],
+        "required": [
+          "type"
+        ],
         "properties": {
-          "p_format": { "$ref": "#/$defs/pFormat" },
-          "r_format": { "$ref": "#/$defs/rFormat" },
-          "title": { "type": "string" },
-          "word_style_id": { "type": "string" },
-          "source_word_style_id": { "type": "string" }
+          "type": {
+            "type": "string",
+            "enum": [
+              "paragraph",
+              "character",
+              "table",
+              "numbering"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "w:name/@w:val"
+          },
+          "based_on": {
+            "type": "string",
+            "description": "w:basedOn/@w:val"
+          },
+          "next": {
+            "type": "string",
+            "description": "w:next/@w:val"
+          },
+          "link": {
+            "type": "string",
+            "description": "w:link/@w:val (linked style para<->char)"
+          },
+          "is_default": {
+            "type": "boolean",
+            "description": "w:style/@w:default"
+          },
+          "custom": {
+            "type": "boolean",
+            "description": "w:style/@w:customStyle"
+          },
+          "ui_priority": {
+            "type": "integer",
+            "description": "w:uiPriority/@w:val"
+          },
+          "q_format": {
+            "type": "boolean",
+            "description": "presence of w:qFormat"
+          },
+          "semi_hidden": {
+            "type": "boolean",
+            "description": "presence of w:semiHidden"
+          },
+          "unhide_when_used": {
+            "type": "boolean",
+            "description": "presence of w:unhideWhenUsed"
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "presence of w:locked"
+          },
+          "p_format": {
+            "$ref": "#/$defs/pFormat",
+            "description": "Paragraph properties (w:pPr) for paragraph styles."
+          },
+          "r_format": {
+            "$ref": "#/$defs/rFormat",
+            "description": "Run properties (w:rPr) for paragraph/character styles."
+          },
+          "tbl_format": {
+            "type": "object",
+            "description": "Табличные свойства стиля (w:tblPr/w:tblStylePr) — опционально, расширяется по мере необходимости.",
+            "additionalProperties": true
+          }
         }
       }
     },
-
-    "character_styles": {
-      "type": "object",
-      "description": "Библиотека символьных стилей (только r_format). Ключ = style_id.",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["r_format"],
-        "properties": {
-          "r_format": { "$ref": "#/$defs/rFormat" },
-          "title": { "type": "string" },
-          "word_style_id": { "type": "string" }
-        }
-      }
-    },
-
     "content": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["style_id", "runs"],
+        "required": [
+          "p_style_id",
+          "runs"
+        ],
         "properties": {
-          "style_id": { "type": "string" },
-          "source_word_style_id": { "type": "string" },
-          "p_format": { "$ref": "#/$defs/pFormat" },
+          "p_style_id": {
+            "type": "string",
+            "description": "Paragraph styleId (w:pStyle/@w:val) — ключ в styles."
+          },
+          "p_format": {
+            "$ref": "#/$defs/pFormat",
+            "description": "Inline override для paragraph properties (w:pPr), поверх стиля."
+          },
           "runs": {
             "type": "array",
-            "items": { "$ref": "#/$defs/run" }
+            "items": {
+              "$ref": "#/$defs/run"
+            }
+          },
+          "source_word_style_id": {
+            "type": "string",
+            "description": "[DEPRECATED] Старое поле для отладки/трассировки."
           }
         }
       }
