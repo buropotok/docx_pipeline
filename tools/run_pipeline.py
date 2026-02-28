@@ -11,12 +11,13 @@ except ImportError:
     from tools.logging_utils import setup_run_logger
 
 
-WORK_DIR = Path(__file__).resolve().parent.parent / "data"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+WORK_DIR = ROOT_DIR / "data"
 
 
 def parse_versions_from_version_md() -> dict:
     out = {"Schema": "unknown", "Rules": "unknown", "Parser": "unknown", "Reconstructor": "unknown"}
-    vpath = Path("VERSION.md")
+    vpath = ROOT_DIR / "VERSION.md"
     if not vpath.exists():
         return out
     for line in vpath.read_text(encoding="utf-8").splitlines():
@@ -78,9 +79,9 @@ def file_size_if_exists(path: Path) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2 or sys.argv[1] in {"-h", "--help"}:
         print("Usage: python -m tools.run_pipeline <donor.docx | /abs/path/donor.docx>")
-        return 2
+        return 0 if len(sys.argv) == 2 else 2
 
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     logger, log_path = setup_run_logger(WORK_DIR)
