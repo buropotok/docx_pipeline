@@ -1011,13 +1011,10 @@ class UltimateParserV43:
         # lang
         lang = rPr.find(qn("w:lang"))
         if lang is not None:
-            rec: Dict[str, Any] = {}
-            for k in ("val", "eastAsia", "bidi"):
-                v = lang.get(f"{{{W_NS}}}{k}")
-                if v is not None:
-                    rec[k] = v
-            if rec:
-                out["lang"] = rec
+            # Schema v2.12 expects rFormat.lang to be a string.
+            v = lang.get(f"{{{W_NS}}}val") or lang.get(f"{{{W_NS}}}eastAsia") or lang.get(f"{{{W_NS}}}bidi")
+            if v:
+                out["lang"] = v
 
         # ADD BACK: character spacing (w:spacing) and position (w:position)
         sp = rPr.find(qn("w:spacing"))
@@ -1108,6 +1105,22 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:cr"):
                     run_obj: Dict[str, Any] = {"type": "cr"}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
+                    _attach_style_fields(run_obj)
+                    out.append(run_obj)
+                    first_emitted = True
+
+                elif node.tag == qn("w:softHyphen"):
+                    run_obj: Dict[str, Any] = {"type": "softHyphen"}
+                    run_obj["id"] = f"run_{self._run_counter}"
+                    self._run_counter += 1
+                    _attach_style_fields(run_obj)
+                    out.append(run_obj)
+                    first_emitted = True
+
+                elif node.tag == qn("w:noBreakHyphen"):
+                    run_obj: Dict[str, Any] = {"type": "noBreakHyphen"}
                     run_obj["id"] = f"run_{self._run_counter}"
                     self._run_counter += 1
                     _attach_style_fields(run_obj)
