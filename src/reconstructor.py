@@ -1,6 +1,6 @@
 # UltimateReconstructorV12.py
 # Reconstructor Version: v12
-# Schema Version: 2.9
+# Schema Version: 2.12
 # Rules Version: 0.3
 
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)

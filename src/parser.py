@@ -1,7 +1,7 @@
 # UltimateParserV43.py
-# DOCX -> RAW JSON (schema v2.9) with Normal base style and character styles
+# DOCX -> RAW JSON (schema v2.12) with Normal base style and character styles
 # Parser Version: v43
-# Schema Version: 2.9
+# Schema Version: 2.12
 # Rules Version: 0.3
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -193,7 +193,7 @@ class WordStyle:
 
 class UltimateParserV43:
     """
-    Deterministic DOCX -> RAW JSON parser (schema v2.9).
+    Deterministic DOCX -> RAW JSON parser (schema v2.12).
     Subset target: "forms" (no tables/images/fields/hyperlinks). Non-run nodes in paragraphs
     are ignored (proofErr etc.).
     """
@@ -470,16 +470,6 @@ class UltimateParserV43:
     # =========================
 
     def process(self) -> str:
-        # Compute Normal effective formatting
-        normal_word_style_id = self._get_default_word_paragraph_style_id()  # usually "a"
-        if normal_word_style_id is None:
-            # Fallback: use built-in Normal defaults
-            self.normal_p_format = dict(NORMAL_P_FORMAT)
-            self.normal_r_format = dict(NORMAL_R_FORMAT)
-        else:
-            self.normal_p_format = self._effective_p_format(normal_word_style_id, None)
-            self.normal_r_format = self._effective_r_format(normal_word_style_id)
-
         settings: Dict[str, Any] = {}
         default_tab_stop = self._parse_default_tab_stop()
         if default_tab_stop is not None:
@@ -490,7 +480,7 @@ class UltimateParserV43:
 
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.11",
+                "schema_version": "2.12",
                 "rules_version": "0.3",
                 "producer": {
                     "name": "UltimateParserV43",
@@ -502,84 +492,296 @@ class UltimateParserV43:
                 "settings": settings
             },
             "numbering_definitions": numbering_definitions,
-            "styles": {},
-            "character_styles": {},
+            "doc_defaults": self._parse_doc_defaults_v212(),
+            "latent_styles": self._parse_latent_styles_v212(),
+            "styles": self._parse_styles_v212(),
             "content": []
         }
 
         body = self.document_xml.find(qn("w:body"))
-        default_word_style_id = self._get_default_word_paragraph_style_id()
         paragraphs_count = 0
         runs_count = 0
 
-        if body is None:
-            if default_word_style_id is not None:
-                default_p_format = self._effective_p_format(default_word_style_id, None)
-                default_r_format = self._effective_r_format(default_word_style_id)
-                p_diff = _dict_diff(self.normal_p_format, default_p_format)
-                r_diff = _dict_diff(self.normal_r_format, default_r_format)
-                default_style_id = self._register_out_style(p_diff, r_diff, source_word_style_id=default_word_style_id)
-                result["meta"]["default_style_id"] = default_style_id
-            self._finalize_styles(result)
-            result["styles"] = self.out_styles
-            result["character_styles"] = self.out_char_styles
-            print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} "
-                  f"styles_count={len(result['styles'])} char_styles_count={len(result['character_styles'])}")
-            return json.dumps(result, ensure_ascii=False, indent=2)
+        if body is not None:
+            for p in body.findall(qn("w:p")):
+                paragraphs_count += 1
+                pPr = p.find(qn("w:pPr"))
+                p_style_id = self._get_inline_p_style_id(pPr)
 
-        for p in body.findall(qn("w:p")):
-            paragraphs_count += 1
-            pPr = p.find(qn("w:pPr"))
-            p_style_id = self._get_p_style_id(pPr)
+                item: Dict[str, Any] = {
+                    "p_style_id": p_style_id,
+                    "runs": self._parse_runs(p)
+                }
+                runs_count += len(item["runs"])
 
-            # Effective paragraph formatting: docDefaults + style chain + direct pPr
-            eff_p = self._effective_p_format(p_style_id, pPr)
+                p_inline = self._to_schema_p_format(self._parse_pPr(pPr, include_indent_origin=False))
+                if p_inline:
+                    item["p_format"] = p_inline
 
-            # Effective run formatting: docDefaults + style chain
-            eff_r_paragraph = self._effective_r_format(p_style_id)
+                result["content"].append(item)
 
-            # Paragraph mark rPr (direct pPr/rPr) – apply only for empty paragraphs (RULE-006)
-            para_mark_rPr = self._parse_rPr(pPr.find(qn("w:rPr")) if pPr is not None else None)
+        if os.getenv("DOCX_PIPELINE_VALIDATE_RAW") == "1":
+            self._validate_raw_v212(result)
 
-            # Compute diff from Normal for this paragraph
-            p_diff = _dict_diff(self.normal_p_format, eff_p)
-            r_diff_paragraph = _dict_diff(self.normal_r_format, eff_r_paragraph)
-
-            runs = self._parse_runs(p, eff_r_paragraph)
-            runs_count += len(runs)
-
-            # RULE-006: empty paragraph -> include para_mark_rPr in r_format
-            if not runs:
-                full_r = _merge(eff_r_paragraph, para_mark_rPr)
-                r_diff_paragraph = _dict_diff(self.normal_r_format, full_r)
-
-            style_id = self._register_out_style(p_diff, r_diff_paragraph, source_word_style_id=p_style_id)
-
-            item: Dict[str, Any] = {"style_id": style_id, "runs": runs}
-            if p_style_id is not None:
-                item["source_word_style_id"] = p_style_id
-            result["content"].append(item)
-
-        if default_word_style_id is not None:
-            default_p_format = self._effective_p_format(default_word_style_id, None)
-            default_r_format = self._effective_r_format(default_word_style_id)
-            p_diff = _dict_diff(self.normal_p_format, default_p_format)
-            r_diff = _dict_diff(self.normal_r_format, default_r_format)
-            default_style_id = self._register_out_style(p_diff, r_diff, source_word_style_id=default_word_style_id)
-            result["meta"]["default_style_id"] = default_style_id
-
-        # Remap numbering pStyle to our word_style_id
-        self._remap_numbering_pstyles(numbering_definitions)
-
-        # Finalize style metadata
-        self._finalize_styles(result)
-        result["styles"] = self.out_styles
-        result["character_styles"] = self.out_char_styles
-
-        print(f"[parser] summary default_style_id={result['meta'].get('default_style_id')} "
-              f"styles_count={len(result['styles'])} char_styles_count={len(result['character_styles'])} "
-              f"paragraphs_count={paragraphs_count} runs_count={runs_count}")
+        print(
+            f"[parser] summary styles_count={len(result['styles'])} "
+            f"paragraphs_count={paragraphs_count} runs_count={runs_count}"
+        )
         return json.dumps(result, ensure_ascii=False, indent=2)
+
+    def _get_inline_p_style_id(self, pPr: Optional[etree._Element]) -> str:
+        if pPr is not None:
+            pStyle = pPr.find(qn("w:pStyle"))
+            if pStyle is not None:
+                val = pStyle.get(f"{{{W_NS}}}val")
+                if val:
+                    return val
+        default_style = self._get_default_word_paragraph_style_id()
+        if default_style:
+            return default_style
+        return "Normal"
+
+    def _to_schema_p_format(self, old: Dict[str, Any]) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        alignment_map = {
+            "LEFT": "left",
+            "CENTER": "center",
+            "RIGHT": "right",
+            "JUSTIFY": "justify",
+            "DISTRIBUTE": "distribute",
+            "left": "left",
+            "center": "center",
+            "right": "right",
+            "justify": "justify",
+            "distribute": "distribute",
+        }
+        text_alignment_map = {
+            "AUTO": "auto",
+            "BASELINE": "baseline",
+            "TOP": "top",
+            "CENTER": "center",
+            "BOTTOM": "bottom",
+            "auto": "auto",
+            "baseline": "baseline",
+            "top": "top",
+            "center": "center",
+            "bottom": "bottom",
+        }
+        line_rule_map = {
+            "AUTO": "auto",
+            "AT_LEAST": "atLeast",
+            "EXACT": "exact",
+            "auto": "auto",
+            "atLeast": "atLeast",
+            "exact": "exact",
+        }
+        key_map = {
+            "lineTwip": "line_spacing_twip",
+            "spaceBeforeTwip": "space_before_twip",
+            "spaceAfterTwip": "space_after_twip",
+            "indentStartTwip": "indent_start_twip",
+            "indentEndTwip": "indent_end_twip",
+            "indentFirstLineTwip": "indent_first_line_twip",
+            "indentHangingTwip": "indent_hanging_twip",
+            "keepNext": "keep_next",
+            "keepLines": "keep_lines",
+            "pageBreakBefore": "page_break_before",
+            "widowControl": "widow_control",
+        }
+        for k, v in old.items():
+            if v is None:
+                continue
+            if k == "alignment":
+                mapped = alignment_map.get(v)
+                if mapped is not None:
+                    out["alignment"] = mapped
+            elif k == "textAlignment":
+                mapped = text_alignment_map.get(v)
+                if mapped is not None:
+                    out["text_alignment"] = mapped
+            elif k == "lineRule":
+                mapped = line_rule_map.get(v)
+                if mapped is not None:
+                    out["line_rule"] = mapped
+            elif k == "numbering" and isinstance(v, dict):
+                num_id = v.get("numId")
+                ilvl = v.get("ilvl")
+                if num_id is not None and ilvl is not None:
+                    out["list_info"] = {"numId": str(num_id), "ilvl": str(ilvl)}
+            elif k in key_map:
+                out[key_map[k]] = v
+            elif k == "tabs":
+                out["tabs"] = v
+        return out
+
+    def _to_schema_r_format(self, old: Dict[str, Any]) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        vert_map = {
+            "baseline": "baseline",
+            "superscript": "superscript",
+            "subscript": "subscript",
+        }
+        key_map = {
+            "all_caps": "caps",
+            "vertical_align": "vert_align",
+            "charSpacingTwip": "spacing_twip",
+            "positionHalfPoints": "position_half_points",
+            "font_size_half_points": "font_size_half_points",
+            "rFonts": "rFonts",
+            "lang": "lang",
+            "bold": "bold",
+            "italic": "italic",
+            "underline": "underline",
+            "color": "color",
+        }
+        for k, v in old.items():
+            if v is None:
+                continue
+            if k == "vertical_align":
+                mapped = vert_map.get(v)
+                if mapped is not None:
+                    out["vert_align"] = mapped
+            elif k in key_map:
+                out[key_map[k]] = v
+        return out
+
+    def _parse_doc_defaults_v212(self) -> Dict[str, Any]:
+        if self.styles_xml is None:
+            return {"p_format": {}, "r_format": {}}
+
+        p_old: Dict[str, Any] = {}
+        r_old: Dict[str, Any] = {}
+        docDefaults = self.styles_xml.find(qn("w:docDefaults"))
+        if docDefaults is not None:
+            pDef = docDefaults.find(qn("w:pPrDefault"))
+            if pDef is not None:
+                p_old = self._parse_pPr(pDef.find(qn("w:pPr")))
+            rDef = docDefaults.find(qn("w:rPrDefault"))
+            if rDef is not None:
+                r_old = self._parse_rPr(rDef.find(qn("w:rPr")))
+
+        return {
+            "p_format": self._to_schema_p_format(p_old),
+            "r_format": self._to_schema_r_format(r_old),
+        }
+
+    def _parse_latent_styles_v212(self) -> Dict[str, Any]:
+        if self.styles_xml is None:
+            return {}
+        latent = self.styles_xml.find(qn("w:latentStyles"))
+        if latent is None:
+            return {}
+
+        out: Dict[str, Any] = {}
+        bool_attr_map = {
+            "defLockedState": "defaultLockedState",
+            "defSemiHidden": "defaultSemiHiddenState",
+            "defUnhideWhenUsed": "defaultUnhideWhenUsedState",
+            "defQFormat": "defaultQFormatState",
+        }
+        for src, dst in bool_attr_map.items():
+            bv = _bool_from_attr(latent.get(f"{{{W_NS}}}{src}"))
+            if bv is not None:
+                out[dst] = bv
+
+        ui = _int_attr(latent, "defUIPriority")
+        if ui is not None:
+            out["defaultUiPriority"] = ui
+
+        exceptions: Dict[str, Any] = {}
+        for exc in latent.findall(qn("w:lsdException")):
+            name = _str_attr(exc, "name")
+            if not name:
+                continue
+            rec: Dict[str, Any] = {}
+            for src, dst in (
+                ("locked", "locked"),
+                ("semiHidden", "semiHidden"),
+                ("unhideWhenUsed", "unhideWhenUsed"),
+                ("qFormat", "qFormat"),
+            ):
+                bv = _bool_from_attr(exc.get(f"{{{W_NS}}}{src}"))
+                if bv is not None:
+                    rec[dst] = bv
+            pr = _int_attr(exc, "uiPriority")
+            if pr is not None:
+                rec["uiPriority"] = pr
+            if rec:
+                exceptions[name] = rec
+        if exceptions:
+            out["exceptions"] = exceptions
+        return out
+
+    def _parse_styles_v212(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        if self.styles_xml is None:
+            return out
+
+        styles_by_id: Dict[str, etree._Element] = {}
+        for st in self.styles_xml.findall(qn("w:style")):
+            st_id = _str_attr(st, "styleId")
+            st_type = _str_attr(st, "type")
+            if st_id and st_type in {"paragraph", "character", "table", "numbering"}:
+                styles_by_id[st_id] = st
+
+        for style_id in sorted(styles_by_id.keys()):
+            st = styles_by_id[style_id]
+            st_type = _str_attr(st, "type")
+            if st_type is None:
+                continue
+            rec: Dict[str, Any] = {"type": st_type}
+
+            nm = st.find(qn("w:name"))
+            if nm is not None:
+                name = _str_attr(nm, "val")
+                if name is not None:
+                    rec["name"] = name
+
+            for tag, key in (("w:basedOn", "based_on"), ("w:next", "next"), ("w:link", "link")):
+                el = st.find(qn(tag))
+                if el is not None:
+                    v = _str_attr(el, "val")
+                    if v is not None:
+                        rec[key] = v
+
+            is_default = _bool_from_attr(st.get(f"{{{W_NS}}}default"))
+            if is_default is not None:
+                rec["is_default"] = is_default
+            custom = _bool_from_attr(st.get(f"{{{W_NS}}}customStyle"))
+            if custom is not None:
+                rec["custom"] = custom
+
+            ui_pr = st.find(qn("w:uiPriority"))
+            if ui_pr is not None:
+                ui_val = _int_attr(ui_pr, "val")
+                if ui_val is not None:
+                    rec["ui_priority"] = ui_val
+
+            for tag, key in (
+                ("w:qFormat", "q_format"),
+                ("w:semiHidden", "semi_hidden"),
+                ("w:unhideWhenUsed", "unhide_when_used"),
+                ("w:locked", "locked"),
+            ):
+                el = st.find(qn(tag))
+                if el is not None:
+                    bv = _bool_present(el)
+                    if bv is not None:
+                        rec[key] = bv
+
+            if st_type == "paragraph":
+                p_format = self._to_schema_p_format(self._parse_pPr(st.find(qn("w:pPr"))))
+                if p_format:
+                    rec["p_format"] = p_format
+
+            if st_type in {"paragraph", "character"}:
+                r_format = self._to_schema_r_format(self._parse_rPr(st.find(qn("w:rPr"))))
+                if r_format:
+                    rec["r_format"] = r_format
+
+            out[style_id] = rec
+
+        return out
 
     def _finalize_styles(self, result: Dict[str, Any]) -> None:
         """Assign titles and word_style_id for all styles."""
@@ -1195,11 +1397,9 @@ class UltimateParserV43:
     # RUNS PARSING (w:r children) -> schema runs[]
     # =========================
 
-    def _parse_runs(self, p: etree._Element, base_r_for_diff: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _parse_runs(self, p: etree._Element) -> List[Dict[str, Any]]:
         """
-        Parse runs and create character styles.
-        Instead of diff, we record char_style_id.
-        base_r_for_diff is the effective rPr of the paragraph (including Normal + style).
+        Parse runs preserving token order and inline formatting.
         """
         out: List[Dict[str, Any]] = []
         first_emitted = False  # for meta.leading on first tab
@@ -1209,7 +1409,18 @@ class UltimateParserV43:
                 continue
 
             rPr = child.find(qn("w:rPr"))
-            run_local_r = self._parse_rPr(rPr)   # direct run formatting
+            run_local_r = self._to_schema_r_format(self._parse_rPr(rPr))
+            r_style_id = None
+            if rPr is not None:
+                r_style = rPr.find(qn("w:rStyle"))
+                if r_style is not None:
+                    r_style_id = _str_attr(r_style, "val")
+
+            def _attach_style_fields(run_obj: Dict[str, Any]) -> None:
+                if r_style_id:
+                    run_obj["r_style_id"] = r_style_id
+                if run_local_r:
+                    run_obj["r_format"] = run_local_r
 
             for node in child:
                 if node.tag == qn("w:rPr"):
@@ -1222,9 +1433,7 @@ class UltimateParserV43:
                     run_obj: Dict[str, Any] = {"type": "text", "text": txt}
                     run_obj["id"] = f"run_{self._run_counter}"
                     self._run_counter += 1
-                    if run_local_r:
-                        char_style_id = self._register_char_style(run_local_r)
-                        run_obj["char_style_id"] = char_style_id
+                    _attach_style_fields(run_obj)
                     if preserve:
                         run_obj["meta"] = {"preserve": True}
 
@@ -1236,9 +1445,7 @@ class UltimateParserV43:
                     run_obj: Dict[str, Any] = {"type": "tab"}
                     run_obj["id"] = f"run_{self._run_counter}"
                     self._run_counter += 1
-                    if run_local_r:
-                        char_style_id = self._register_char_style(run_local_r)
-                        run_obj["char_style_id"] = char_style_id
+                    _attach_style_fields(run_obj)
 
                     # ADD: first visual token is a tab -> meta.leading=true
                     if not first_emitted:
@@ -1254,9 +1461,7 @@ class UltimateParserV43:
                     br_type = node.get(f"{{{W_NS}}}type")
                     if br_type in ("textWrapping", "page", "column"):
                         run_obj["break_type"] = br_type
-                    if run_local_r:
-                        char_style_id = self._register_char_style(run_local_r)
-                        run_obj["char_style_id"] = char_style_id
+                    _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
 
@@ -1264,9 +1469,7 @@ class UltimateParserV43:
                     run_obj: Dict[str, Any] = {"type": "cr"}
                     run_obj["id"] = f"run_{self._run_counter}"
                     self._run_counter += 1
-                    if run_local_r:
-                        char_style_id = self._register_char_style(run_local_r)
-                        run_obj["char_style_id"] = char_style_id
+                    _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
 
@@ -1276,9 +1479,7 @@ class UltimateParserV43:
                     run_obj: Dict[str, Any] = {"type": "sym", "text": _sym_encode(font, char)}
                     run_obj["id"] = f"run_{self._run_counter}"
                     self._run_counter += 1
-                    if run_local_r:
-                        char_style_id = self._register_char_style(run_local_r)
-                        run_obj["char_style_id"] = char_style_id
+                    _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
 
@@ -1288,10 +1489,7 @@ class UltimateParserV43:
                     self._run_counter += 1
                     pic_data = parse_picture_node(node, run_id, self.relationships)
                     if pic_data:
-                        # Добавляем char_style_id, если есть локальное форматирование
-                        if run_local_r:
-                            char_style_id = self._register_char_style(run_local_r)
-                            pic_data["char_style_id"] = char_style_id
+                        _attach_style_fields(pic_data)
                         out.append(pic_data)
                         first_emitted = True
                 else:
@@ -1299,6 +1497,69 @@ class UltimateParserV43:
                     continue
 
         return out
+
+    def _validate_raw_v212(self, result: Dict[str, Any]) -> None:
+        required = [
+            ("meta",),
+            ("meta", "schema_version"),
+            ("document_info",),
+            ("numbering_definitions",),
+            ("doc_defaults",),
+            ("doc_defaults", "p_format"),
+            ("doc_defaults", "r_format"),
+            ("latent_styles",),
+            ("styles",),
+            ("content",),
+        ]
+        for path in required:
+            cur: Any = result
+            for part in path:
+                if not isinstance(cur, dict) or part not in cur:
+                    raise ValueError(f"RAW validation failed: missing key {'/'.join(path)}")
+                cur = cur[part]
+
+        forbidden = {"character_styles", "style_id", "char_style_id", "source_word_style_id"}
+
+        def _scan(obj: Any, path: str) -> None:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k in forbidden:
+                        raise ValueError(f"RAW validation failed: forbidden field '{k}' at {path or '/'}")
+                    _scan(v, f"{path}/{k}")
+            elif isinstance(obj, list):
+                for i, it in enumerate(obj):
+                    _scan(it, f"{path}[{i}]")
+
+        _scan(result, "")
+
+        styles = result.get("styles", {})
+        if not isinstance(styles, dict):
+            raise ValueError("RAW validation failed: styles must be an object")
+
+        for i, para in enumerate(result.get("content", [])):
+            if not isinstance(para, dict):
+                raise ValueError(f"RAW validation failed: content[{i}] must be an object")
+            if "p_style_id" not in para:
+                raise ValueError(f"RAW validation failed: content[{i}] missing p_style_id")
+            if "runs" not in para or not isinstance(para["runs"], list):
+                raise ValueError(f"RAW validation failed: content[{i}] missing runs list")
+            for j, run in enumerate(para["runs"]):
+                if not isinstance(run, dict):
+                    raise ValueError(f"RAW validation failed: content[{i}].runs[{j}] must be object")
+                r_style_id = run.get("r_style_id")
+                if isinstance(r_style_id, str) and r_style_id not in styles:
+                    print(f"[parser] warn: r_style_id '{r_style_id}' missing in styles at content[{i}].runs[{j}]")
+                if run.get("type") == "picture":
+                    file_val = run.get("file")
+                    if not isinstance(file_val, str) or not file_val.startswith("media/"):
+                        raise ValueError(f"RAW validation failed: picture file must start with media/ at content[{i}].runs[{j}]")
+                    ext = run.get("extent")
+                    if ext is not None:
+                        if not isinstance(ext, dict):
+                            raise ValueError(f"RAW validation failed: picture extent must be object at content[{i}].runs[{j}]")
+                        for key in ("cx", "cy"):
+                            if key in ext and not isinstance(ext[key], int):
+                                raise ValueError(f"RAW validation failed: picture extent.{key} must be integer at content[{i}].runs[{j}]")
 
     def dump_donor_xml_parts(self, out_root_dir: str) -> None:
         os.makedirs(out_root_dir, exist_ok=True)
