@@ -1,15 +1,15 @@
-Reconstruction Contract v0.2
-(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV11 + RAW JSON Schema v2.8.3)
+Reconstruction Contract v0.3
+(DOCX ↔ RAW JSON Core Rules, synced with UltimateReconstructorV12 + RAW JSON Schema v2.12)
 
 0. Versioning
 - RAW JSON MUST declare:
   meta.schema_version
   meta.rules_version
 - This contract corresponds to:
-  rules_version = "0.2"
-  schema_version = "2.8.3"
-  parser_version = "v42"
-  reconstructor_version = "v11"
+  rules_version = "0.3"
+  schema_version = "2.12"
+  parser_version = "v43"
+  reconstructor_version = "v12"
 
 1. General Principles
 1.1 Goal
@@ -44,7 +44,7 @@ RULE-R-VAL-001 — Reconstructor validation/fail-fast
 - If required reconstruction value is missing, reconstructor MUST fail with a contract violation error.
 - Reconstructor MUST NOT synthesize fallback values for missing required data.
 
-1.4 Scope (v0.2)
+1.4 Scope (v0.3)
 Included:
 - Paragraphs (<w:p>) with runs (<w:r>) and tokens <w:t>, <w:tab/>, <w:br/>, <w:cr/>, <w:sym/>
 - Basic paragraph formatting: alignment, indents, spacing, tabs, numbering refs
@@ -56,7 +56,7 @@ Excluded / not guaranteed for deterministic behavior in this version:
 - Tables, drawings/images/shapes, fields, hyperlinks, headers/footers, footnotes/endnotes
 - Complex section breaks beyond one terminal sectPr
 - Advanced style inheritance beyond what the parser explicitly resolves into RAW
-- Run token types softHyphen and noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV11 (see RULE-RUN-COMPATIBILITY and RULE-RUN-UNSUPPORTED)
+- Run token types softHyphen and noBreakHyphen are allowed by schema but are NOT reconstructed by UltimateReconstructorV12 (see RULE-RUN-COMPATIBILITY and RULE-RUN-UNSUPPORTED)
 
 2. Parsing Rules (DOCX → RAW)
 
@@ -84,7 +84,7 @@ No trimming or normalization is allowed.
 RULE-P-004 — Preserve Flag Capture (informational)
 If source <w:t> has xml:space="preserve", parser MAY set:
   run.meta.preserve = true
-This flag is informational in v0.2 and is not required for reconstruction correctness (see RULE-R-006).
+This flag is informational in v0.3 and is not required for reconstruction correctness (see RULE-R-006).
 
 RULE-P-005 — Numbering Mapping
 If paragraph contains:
@@ -143,7 +143,7 @@ RAW styles library entries MAY include the following OPTIONAL metadata fields:
 Additionally, content items MAY include:
   - content[].source_word_style_id: donor Word paragraph styleId for that paragraph.
 These fields MUST be assigned deterministically (no guessing) and MUST NOT affect formatting de-duplication (style identity remains based on p_format+r_format only).
-UltimateReconstructorV11 may ignore these fields until the dedicated styles.xml materialization stage is implemented.
+UltimateReconstructorV12 may ignore these fields until the dedicated styles.xml materialization stage is implemented.
 
 RULE-P-008 — Numbering Level Geometry (lvl pPr subset)
 If numbering.xml level contains:
@@ -171,7 +171,7 @@ RULE-R-002 — Paragraph Formatting Emission
 For each content item:
 - A <w:p> MUST be emitted.
 - Paragraph properties MUST be emitted from styles[style_id].p_format.
-- content[].p_override exists in schema but is NOT applied by UltimateReconstructorV11 (see RULE-R-OVERRIDE-NYI).
+- content[].p_override exists in schema but is NOT applied by UltimateReconstructorV12 (see RULE-R-OVERRIDE-NYI).
 
 RULE-R-003 — Empty Paragraph Preservation
 If RAW paragraph has:
@@ -197,10 +197,10 @@ For run.type="text" (and run.type="sym" in this reconstructor):
   - starts with space, OR
   - ends with space, OR
   - contains two consecutive spaces
-(run.meta.preserve is allowed by schema but is not required by UltimateReconstructorV11.)
+(run.meta.preserve is allowed by schema but is not required by UltimateReconstructorV12.)
 
 RULE-R-007 — Token Emission
-Supported run types in UltimateReconstructorV11:
+Supported run types in UltimateReconstructorV12:
 - text  -> <w:t>
 - tab   -> <w:tab/>
 - break -> <w:br/> and optional @w:type from run.break_type if provided and valid
@@ -212,14 +212,14 @@ RULE-R-008 — Leading Tab Hint (informational)
 If RAW run:
   { "type": "tab", "meta": { "leading": true } }
 Reconstructor emits <w:tab/> (same as any tab run).
-This hint is informational in v0.2 (no tab-to-indent conversion exists).
+This hint is informational in v0.3 (no tab-to-indent conversion exists).
 
 RULE-R-OVERRIDE-NYI — Paragraph Overrides Not Yet Implemented
 content[].p_override is reserved by schema.
-UltimateReconstructorV11 does not apply p_override in this version.
-Therefore, for deterministic reconstruction with V11, producers SHOULD omit p_override or keep it empty.
+UltimateReconstructorV12 does not apply p_override in this version.
+Therefore, for deterministic reconstruction with V12, producers SHOULD omit p_override or keep it empty.
 
-RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v42 + Reconstructor v11)
+RULE-RUN-COMPATIBILITY — Run Type Coverage (Parser v43 + Reconstructor v12)
 Parsed + reconstructed (end-to-end):
 - text, tab, break, cr, sym
 Parsed only (not reconstructed):
@@ -227,11 +227,11 @@ Parsed only (not reconstructed):
 Unsupported in current scope:
 - run token content outside schema-defined run.type set
 
-RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V11
-Run types allowed by schema but ignored by UltimateReconstructorV11:
+RULE-RUN-UNSUPPORTED — Schema-Allowed but Not Reconstructed by V12
+Run types allowed by schema but ignored by UltimateReconstructorV12:
 - softHyphen, noBreakHyphen
 If present, they do not contribute to reconstructed XML in this version.
-For strict 1:1 determinism with V11, producers MUST NOT emit these run types.
+For strict 1:1 determinism with V12, producers MUST NOT emit these run types.
 
 RULE-R-009 — Package Parts
 Reconstructor MUST write:
