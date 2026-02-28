@@ -1,16 +1,10 @@
 # UltimateParserV43.py
-# DOCX -> RAW JSON (schema v2.12) with Normal base style and character styles
+# Schema v2.12 parser: imports styles.xml into JSON styles library; uses p_style_id/r_style_id + inline r_format; numbering + pictures preserved; legacy synthetic styles removed.
 # Parser Version: v43
 # Schema Version: 2.12
 # Rules Version: 0.3
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
-#
-# Based on UltimateParserV42, with major improvements:
-# 1) Normal base style with full default attributes (Times New Roman, 12pt, etc.)
-# 2) Paragraph styles stored as diff from Normal
-# 3) Character styles introduced; runs use char_style_id instead of diff
-# 4) Numbering pStyle mapping preserved
 
 from __future__ import annotations
 
@@ -18,7 +12,6 @@ import argparse
 import json
 import os
 import zipfile
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from lxml import etree
@@ -29,48 +22,6 @@ from parser_picture import parse_picture_node
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 BASE_DIR = "."
-
-# Default Normal style values (based on Word's Normal + observed donor)
-NORMAL_P_FORMAT: Dict[str, Any] = {
-    "alignment": "LEFT",
-    "indentStartTwip": 0,
-    "indentEndTwip": 0,
-    "indentFirstLineTwip": 0,
-    "indentHangingTwip": 0,
-    "spaceBeforeTwip": 0,
-    "spaceAfterTwip": 0,
-    "lineTwip": 240,
-    "lineRule": "AUTO",
-    "keepNext": False,
-    "keepLines": False,
-    "pageBreakBefore": False,
-    "widowControl": True,
-    "snapToGrid": False,
-    "contextualSpacing": False,
-    # textAlignment not set (AUTO by absence)
-    # tabs empty list, numbering absent
-}
-NORMAL_R_FORMAT: Dict[str, Any] = {
-    "rFonts": {
-        "ascii": "Times New Roman",
-        "hAnsi": "Times New Roman",
-        "eastAsia": "SimSun;宋体",
-        "cs": "Times New Roman"
-    },
-    "font_size_half_points": 24,
-    "bold": False,
-    "italic": False,
-    "underline": None,          # absent means none
-    "color": "auto",
-    "vertical_align": "baseline",
-    "all_caps": False,
-    "charSpacingTwip": 0,
-    "positionHalfPoints": 0,
-    "lang": {
-        "eastAsia": "zh-CN"
-    }
-}
-
 
 def qn(tag: str) -> str:
     pfx, local = tag.split(":")
@@ -133,46 +84,6 @@ def _map_line_rule(val: Optional[str]) -> Optional[str]:
     return mapping.get(val)
 
 
-def _merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-    """Shallow merge where b overrides a; skips None values in b."""
-    out = dict(a)
-    for k, v in b.items():
-        if v is None:
-            continue
-        out[k] = v
-    return out
-
-
-def _stable_json_key(obj: Any) -> str:
-    """Deterministic key for style de-duplication."""
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def _dict_diff(base: Dict[str, Any], cur: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Compute shallow diff cur vs base.
-    - If a key exists in cur and differs from base => include in diff.
-    - If base has a nested dict and cur has dict => recurse one level (only for dicts).
-    - Deletions are NOT represented (schema has no way), so absent keys in cur are ignored.
-    """
-    diff: Dict[str, Any] = {}
-    for k, v in cur.items():
-        if v is None:
-            continue
-        if k not in base:
-            diff[k] = v
-            continue
-        bv = base.get(k)
-        if isinstance(v, dict) and isinstance(bv, dict):
-            sub = _dict_diff(bv, v)
-            if sub:
-                diff[k] = sub
-        else:
-            if v != bv:
-                diff[k] = v
-    return diff
-
-
 def _sym_encode(font: str, char: str) -> str:
     """
     Stable minimal encoding for w:sym compatible with current schema (text field only).
@@ -181,14 +92,6 @@ def _sym_encode(font: str, char: str) -> str:
     def esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace(";", "\\;").replace("=", "\\=")
     return f"font={esc(font)};char={esc(char)}"
-
-
-@dataclass
-class WordStyle:
-    style_id: str
-    based_on: Optional[str]
-    pPr: Dict[str, Any]   # parsed p_format-like
-    rPr: Dict[str, Any]   # parsed r_format-like
 
 
 class UltimateParserV43:
@@ -241,80 +144,27 @@ class UltimateParserV43:
             except KeyError:
                 self.settings_xml = None
 
-        # Output style library (schema.styles)
-        self.out_styles: Dict[str, Dict[str, Any]] = {}
-        self._style_key_to_id: Dict[str, str] = {}
-        self._style_counter: int = 1
-
-        # Output character styles library (schema.character_styles)
-        self.out_char_styles: Dict[str, Dict[str, Any]] = {}
-        self._char_key_to_id: Dict[str, str] = {}
-        self._char_counter: int = 1
-
         # Счётчик для run_id
         self._run_counter = 1
-
-        # Word styles (for effective formatting)
-        self.doc_defaults_r: Dict[str, Any] = {}
-        self.doc_defaults_p: Dict[str, Any] = {}
-        self.word_styles: Dict[str, WordStyle] = {}
         self.default_paragraph_style_id: Optional[str] = None
 
         self._init_word_styles()
 
-        # Compute Normal effective formatting (will be set in process)
-        self.normal_p_format: Dict[str, Any] = {}
-        self.normal_r_format: Dict[str, Any] = {}
-
     # =========================
-    # WORD STYLES INIT (docDefaults + style chain)
+    # WORD STYLES INIT
     # =========================
 
     def _init_word_styles(self) -> None:
         if self.styles_xml is None:
-            self.doc_defaults_r = {}
-            self.doc_defaults_p = {}
-            self.word_styles = {}
             self.default_paragraph_style_id = None
             return
 
-        # docDefaults
-        docDefaults = self.styles_xml.find(qn("w:docDefaults"))
-        if docDefaults is not None:
-            rDef = docDefaults.find(qn("w:rPrDefault"))
-            if rDef is not None:
-                rPr = rDef.find(qn("w:rPr"))
-                self.doc_defaults_r = self._parse_rPr(rPr)
-
-            pDef = docDefaults.find(qn("w:pPrDefault"))
-            if pDef is not None:
-                pPr = pDef.find(qn("w:pPr"))
-                self.doc_defaults_p = self._parse_pPr(pPr)
-
-        # Styles (paragraph only)
         for st in self.styles_xml.findall(qn("w:style")):
             st_type = _str_attr(st, "type")
             st_id = _str_attr(st, "styleId")
             is_default = _str_attr(st, "default")
 
-            if st_id is None or st_type != "paragraph":
-                continue
-
-            basedOn = st.find(qn("w:basedOn"))
-            based_id = basedOn.get(f"{{{W_NS}}}val") if basedOn is not None else None
-
-            pPr = st.find(qn("w:pPr"))
-            rPr = st.find(qn("w:rPr"))
-
-            ws = WordStyle(
-                style_id=st_id,
-                based_on=based_id,
-                pPr=self._parse_pPr(pPr),
-                rPr=self._parse_rPr(rPr),
-            )
-            self.word_styles[st_id] = ws
-
-            if is_default in ("1", "true"):
+            if st_id is not None and st_type == "paragraph" and is_default in ("1", "true"):
                 self.default_paragraph_style_id = st_id
 
     def _get_default_word_paragraph_style_id(self) -> Optional[str]:
@@ -326,37 +176,6 @@ class UltimateParserV43:
                 if st_type == "paragraph" and st_id and is_default in ("1", "true"):
                     return st_id
         return self.default_paragraph_style_id
-
-    def _get_p_style_id(self, pPr: Optional[etree._Element]) -> Optional[str]:
-        if pPr is None:
-            return self.default_paragraph_style_id
-        pStyle = pPr.find(qn("w:pStyle"))
-        if pStyle is None:
-            return self.default_paragraph_style_id
-        val = pStyle.get(f"{{{W_NS}}}val")
-        return val or self.default_paragraph_style_id
-
-    def _effective_p_format(self, style_id: Optional[str], direct_pPr: Optional[etree._Element]) -> Dict[str, Any]:
-        base = dict(self.doc_defaults_p)
-
-        # style chain root -> leaf
-        for sid in self._style_chain(style_id):
-            ws = self.word_styles.get(sid)
-            if ws is not None:
-                base = _merge(base, ws.pPr)
-
-        # direct pPr overrides
-        direct = self._parse_pPr(direct_pPr, include_indent_origin=True)
-        base = _merge(base, direct)
-
-        # Style-linked numbering: if numbering.xml lvl has <w:pStyle>, Word applies numbering even
-        # when paragraph has no explicit <w:numPr>. Materialize it deterministically from donor.
-        if "numbering" not in base and style_id is not None:
-            implied = getattr(self, "_implied_numpr_by_word_style", {}).get(style_id)
-            if implied is not None and "numbering" not in direct:
-                base["numbering"] = implied
-
-        return base
 
     def _build_implied_numpr_by_word_style(self, numbering_definitions: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """
@@ -396,74 +215,6 @@ class UltimateParserV43:
             out[style_id] = {"numId": numId, "ilvl": ilvl}
 
         return out
-
-    def _effective_r_format(self, style_id: Optional[str]) -> Dict[str, Any]:
-        base = dict(self.doc_defaults_r)
-        for sid in self._style_chain(style_id):
-            ws = self.word_styles.get(sid)
-            if ws is not None:
-                base = _merge(base, ws.rPr)
-        return base
-
-    def _style_chain(self, style_id: Optional[str]) -> List[str]:
-        """
-        Returns list from root->leaf (basedOn first, then child),
-        deterministic and cycle-safe.
-        """
-        if style_id is None:
-            return []
-        visited = set()
-        stack: List[str] = []
-        cur = style_id
-        while cur and cur not in visited:
-            visited.add(cur)
-            stack.append(cur)
-            ws = self.word_styles.get(cur)
-            cur = ws.based_on if ws else None
-        return list(reversed(stack))
-
-    # =========================
-    # OUTPUT STYLE LIBRARY (schema.styles and schema.character_styles)
-    # =========================
-
-    def _register_out_style(
-        self,
-        p_diff: Dict[str, Any],
-        r_diff: Dict[str, Any],
-        source_word_style_id: Optional[str] = None
-    ) -> str:
-        style_obj = {"p_format": p_diff, "r_format": r_diff}
-
-        # IMPORTANT: de-dup key must remain based ONLY on formatting (no metadata).
-        key = _stable_json_key(style_obj)
-        existing = self._style_key_to_id.get(key)
-        if existing:
-            if source_word_style_id is not None:
-                cur = self.out_styles.get(existing, {})
-                # keep first seen for determinism; do not override
-                if isinstance(cur, dict) and cur.get("source_word_style_id") is None:
-                    cur["source_word_style_id"] = source_word_style_id
-            return existing
-
-        style_id = f"s{self._style_counter:04d}"
-        self._style_counter += 1
-        self._style_key_to_id[key] = style_id
-        if source_word_style_id is not None:
-            style_obj["source_word_style_id"] = source_word_style_id
-        self.out_styles[style_id] = style_obj
-        return style_id
-
-    def _register_char_style(self, r_format: Dict[str, Any]) -> str:
-        key = _stable_json_key(r_format)
-        existing = self._char_key_to_id.get(key)
-        if existing:
-            return existing
-
-        style_id = f"c{self._char_counter:04d}"
-        self._char_counter += 1
-        self._char_key_to_id[key] = style_id
-        self.out_char_styles[style_id] = {"r_format": r_format}
-        return style_id
 
     # =========================
     # PUBLIC
@@ -782,116 +533,6 @@ class UltimateParserV43:
             out[style_id] = rec
 
         return out
-
-    def _finalize_styles(self, result: Dict[str, Any]) -> None:
-        """Assign titles and word_style_id for all styles."""
-        para_ids = sorted(self.out_styles.keys())
-        char_ids = sorted(self.out_char_styles.keys())
-
-        # Titles for paragraph styles
-        default_id = result["meta"].get("default_style_id")
-        if default_id and default_id in self.out_styles:
-            self.out_styles[default_id]["title"] = "Обычный"
-
-        # Map source_word_style_id to localized heading names
-        heading_map = {
-            "1": "Заголовок 1",
-            "2": "Заголовок 2",
-            "3": "Заголовок 3",
-            "4": "Заголовок 4",
-            "5": "Заголовок 5",
-            "6": "Заголовок 6",
-            "7": "Заголовок 7",
-            "8": "Заголовок 8",
-            "9": "Заголовок 9",
-        }
-
-        # First pass: assign titles based on source_word_style_id for headings
-        for sid in para_ids:
-            if sid == default_id:
-                continue
-            st = self.out_styles.get(sid, {})
-            if st.get("title") is not None:
-                continue
-            src = st.get("source_word_style_id")
-            if src in heading_map:
-                st["title"] = heading_map[src]
-
-        # Second pass: assign "Стиль N" to remaining styles without title
-        n = 1
-        for sid in para_ids:
-            if sid == default_id:
-                continue
-            st = self.out_styles.get(sid, {})
-            if st.get("title") is None:
-                st["title"] = f"Стиль {n}"
-                n += 1
-
-        # Titles for character styles: "Символьный стиль N"
-        m = 1
-        for cid in char_ids:
-            st = self.out_char_styles.get(cid, {})
-            if st.get("title") is None:
-                st["title"] = f"Символьный стиль {m}"
-                m += 1
-
-        # word_style_id for paragraph styles:
-        # Use source_word_style_id if available and not taken, else generate TF_xxx
-        used_ids = set()
-        for sid, st in self.out_styles.items():
-            src = st.get("source_word_style_id")
-            if src and src not in used_ids and src not in ("a", "Normal"):
-                st["word_style_id"] = src
-                used_ids.add(src)
-            # else will be assigned later
-
-        for sid, st in self.out_styles.items():
-            if "word_style_id" not in st:
-                candidate = f"TF_{sid}"
-                # avoid collision (very unlikely)
-                while candidate in used_ids:
-                    candidate = f"TF_{sid}_{self._style_counter}"
-                st["word_style_id"] = candidate
-                used_ids.add(candidate)
-
-        # word_style_id for character styles: TF_cxxxx
-        for cid, st in self.out_char_styles.items():
-            candidate = f"TF_{cid}"
-            st["word_style_id"] = candidate
-            # no need to track collisions as they are separate
-
-    def _remap_numbering_pstyles(self, numbering_definitions: Dict[str, Any]) -> None:
-        """
-        Replace pStyle values in numbering_definitions with the corresponding word_style_id.
-        If a pStyle refers to a style not in our map, create a minimal paragraph style for it.
-        """
-        # First, collect all pStyle values from numbering
-        pstyle_vals = set()
-        for num_rec in numbering_definitions.values():
-            levels = num_rec.get("levels", {})
-            for lvl_rec in levels.values():
-                ps = lvl_rec.get("pStyle")
-                if ps and isinstance(ps, str):
-                    pstyle_vals.add(ps)
-
-        # Ensure each pstyle has a corresponding paragraph style
-        for ps in pstyle_vals:
-            # Check if any style has this source_word_style_id
-            found = any(st.get("source_word_style_id") == ps for st in self.out_styles.values())
-            if not found:
-                # Create minimal style (empty diff) with source_word_style_id=ps
-                style_id = self._register_out_style({}, {}, source_word_style_id=ps)
-
-        # Now replace pStyle in numbering_definitions with word_style_id
-        for num_rec in numbering_definitions.values():
-            levels = num_rec.get("levels", {})
-            for lvl_rec in levels.values():
-                ps = lvl_rec.get("pStyle")
-                if ps and isinstance(ps, str):
-                    for st in self.out_styles.values():
-                        if st.get("source_word_style_id") == ps:
-                            lvl_rec["pStyle"] = st.get("word_style_id", ps)
-                            break
 
     # =========================
     # DOCUMENT INFO
