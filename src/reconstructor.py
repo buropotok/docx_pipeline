@@ -6,11 +6,10 @@
 # RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
 # Target: visually deterministic for "forms" subset (no tables/images/fields/hyperlinks)
 #
-# Based on UltimateReconstructorV11, with major improvements:
-# 1) Normal base style with full default attributes (Times New Roman, 12pt, etc.)
-# 2) Paragraph styles inherit from Normal (basedOn)
-# 3) Character styles support; runs use rStyle instead of direct rPr
-# 4) Numbering pStyle mapping preserved
+# ГИБРИДНЫЙ ПОДХОД:
+# - Все файлы, кроме document.xml, копируются из донора (raw/donor)
+# - document.xml модифицируется на основе JSON (список абзацев и run'ов)
+# - Все остальные файлы (styles.xml, numbering.xml, settings.xml, отношения, медиа) остаются оригинальными
 
 from __future__ import annotations
 
@@ -18,10 +17,12 @@ import argparse
 import json
 import os
 import zipfile
+import shutil
 from typing import Any, Dict, Optional, List, Tuple
 
 from lxml import etree
 import sys
+
 sys.path.insert(0, os.path.dirname(__file__))
 from reconstructor_picture import add_picture_to_document
 
@@ -32,7 +33,7 @@ PR_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 BASE_DIR = "."
 
-# Default Normal values (same as in parser)
+# Default Normal values (same as in parser) - используются только как запасной вариант
 NORMAL_P_FORMAT: Dict[str, Any] = {
     "alignment": "LEFT",
     "indentStartTwip": 0,
@@ -135,6 +136,7 @@ def _normalize_p_format(p_format: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     out = dict(p_format)
     key_map = {
+        # Существующие поля
         "line_spacing_twip": "lineTwip",
         "line_rule": "lineRule",
         "space_before_twip": "spaceBeforeTwip",
@@ -149,6 +151,14 @@ def _normalize_p_format(p_format: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "widow_control": "widowControl",
         "text_alignment": "textAlignment",
         "list_info": "numbering",
+
+        # Добавить эти поля
+        "contextual_spacing": "contextualSpacing",
+        "snap_to_grid": "snapToGrid",
+        "before_autospacing": "beforeAutospacing",
+        "after_autospacing": "afterAutospacing",
+        "space_before_lines": "spaceBeforeLines",
+        "space_after_lines": "spaceAfterLines",
     }
     line_rule_map = {"auto": "AUTO", "exact": "EXACT", "atLeast": "AT_LEAST"}
     text_alignment_map = {
@@ -200,10 +210,11 @@ class UltimateReconstructorV12:
         self.meta: Dict[str, Any] = self.data.get("meta", {})
         self.document_info: Dict[str, Any] = self.data.get("document_info", {})
         self.numbering_definitions: Dict[str, Any] = self.data.get("numbering_definitions", {})
-        self.styles: Dict[str, Any] = self.data.get("styles", {})          # все стили (paragraph, character, ...)
+        self.styles: Dict[str, Any] = self.data.get("styles", {})  # все стили (paragraph, character, ...)
         self.doc_defaults: Dict[str, Any] = self.data.get("doc_defaults", {})
         self.latent_styles: Dict[str, Any] = self.data.get("latent_styles", {})
         self.content: List[Dict[str, Any]] = self.data.get("content", [])
+        self.donor_raw_dir: Optional[str] = None  # будет установлен в build_docx
 
         self.default_style_id: Optional[str] = self.meta.get("default_style_id")
 
@@ -268,6 +279,49 @@ class UltimateReconstructorV12:
                 if ps and ps in src_to_word:
                     lvl_rec["pStyle"] = src_to_word[ps]
 
+    def _copy_donor_files(self, package_files: Dict[str, bytes]) -> None:
+        """
+        Копирует все файлы из директории донора (raw/donor) в выходной пакет,
+        за исключением document.xml, который будет сгенерирован отдельно.
+        """
+        if not self.donor_raw_dir or not os.path.exists(self.donor_raw_dir):
+            print("[recon] Warning: donor_raw_dir not found, skipping file copy")
+            return
+
+        # Копируем все файлы, кроме document.xml
+        exclude_files = {"word/document.xml"}
+
+        for root, dirs, files in os.walk(self.donor_raw_dir):
+            for file in files:
+                src_path = os.path.join(root, file)
+                # Относительный путь от donor_raw_dir
+                rel_path = os.path.relpath(src_path, self.donor_raw_dir)
+                # Нормализуем разделители для zip
+                rel_path = rel_path.replace("\\", "/")
+
+                # Пропускаем document.xml
+                if rel_path in exclude_files:
+                    continue
+
+                # Пропускаем файлы, которые уже есть в package_files (на случай коллизий)
+                if rel_path in package_files:
+                    continue
+
+                try:
+                    with open(src_path, "rb") as f:
+                        package_files[rel_path] = f.read()
+                    print(f"[recon] Copied donor file: {rel_path}")
+                except Exception as e:
+                    print(f"[recon] Warning: failed to copy {rel_path}: {e}")
+
+        # Копируем также медиафайлы, если они есть
+        if self.donor_media_path and os.path.exists(self.donor_media_path):
+            for file in os.listdir(self.donor_media_path):
+                src = os.path.join(self.donor_media_path, file)
+                if os.path.isfile(src):
+                    with open(src, "rb") as f:
+                        package_files[f"word/media/{file}"] = f.read()
+                    print(f"[recon] Copied media file: {file}")
 
     # =========================
     # PUBLIC
@@ -277,180 +331,217 @@ class UltimateReconstructorV12:
         package_files: Dict[str, bytes] = {}
         self.package_files = package_files
 
-        # Определяем donor_media_path до вызова _build_document_xml
-        run_dir = os.path.dirname(os.path.dirname(self.raw_json_path))  # поднимаемся из out в корень run
+        # Определяем пути к донорским файлам
+        run_dir = os.path.dirname(os.path.dirname(self.raw_json_path))
         donor_raw_dir = os.path.join(run_dir, "raw", "donor")
+        self.donor_raw_dir = donor_raw_dir
         self.donor_media_path = os.path.join(donor_raw_dir, "word", "media")
-        if not os.path.exists(self.donor_media_path):
-            self.donor_media_path = None
+
+        print(f"[recon] donor_raw_dir = {donor_raw_dir}")
         print(f"[recon] donor_media_path = {self.donor_media_path}")
 
-        styles_xml = self._build_styles_xml()
-        document_xml = self._build_document_xml()
-        numbering_xml = self._build_numbering_xml()
-        settings_xml = self._build_settings_xml()
+        # ШАГ 1: Копируем все файлы донора (кроме document.xml)
+        self._copy_donor_files(package_files)
 
-        rels_root = self._build_root_rels()
-        doc_rels = self._build_document_rels(
-            has_numbering=bool(self.numbering_definitions),
-            has_styles=True,
-            has_settings=True,
-            image_rels = self.relationships
-        )
-        content_types = self._build_content_types(
-            has_numbering=bool(self.numbering_definitions),
-            has_styles=True,
-            has_settings=True
-        )
+        # ШАГ 2: Загружаем оригинальный document.xml донора
+        donor_doc_path = os.path.join(donor_raw_dir, "word", "document.xml")
+        if not os.path.exists(donor_doc_path):
+            raise FileNotFoundError(f"Donor document.xml not found at {donor_doc_path}")
 
-        package_files["word/document.xml"] = self._serialize_xml(document_xml, standalone=True)
-        package_files["word/styles.xml"] = self._serialize_xml(styles_xml, standalone=True)
-        package_files["word/settings.xml"] = self._serialize_xml(settings_xml, standalone=True)
-        if self.numbering_definitions:
-            package_files["word/numbering.xml"] = self._serialize_xml(numbering_xml, standalone=True)
+        parser = etree.XMLParser(remove_blank_text=True)
+        doc_tree = etree.parse(donor_doc_path, parser)
+        doc_root = doc_tree.getroot()
 
-        package_files["_rels/.rels"] = self._serialize_xml(rels_root, standalone=True)
-        package_files["word/_rels/document.xml.rels"] = self._serialize_xml(doc_rels, standalone=True)
-        package_files["[Content_Types].xml"] = self._serialize_xml(content_types, standalone=True)
+        # ШАГ 3: Модифицируем document.xml согласно JSON
+        self._modify_document(doc_root, self.content)
 
+        # ШАГ 4: Сохраняем модифицированный document.xml
+        package_files["word/document.xml"] = self._serialize_xml(doc_root, standalone=True)
+
+        # ШАГ 5: Если есть новые изображения, обновляем document.xml.rels
+        # (этот функционал остаётся как был, через add_picture_to_document)
+        # ВАЖНО: при добавлении новых изображений нужно обновлять relationships
+        # которые уже были скопированы из донора
+
+        # Сохраняем для отладки
         raw_reconstructed_dir = os.path.join(os.path.dirname(self.raw_json_path), "raw", "reconstructed")
         self._dump_reconstructed_parts(package_files, raw_reconstructed_dir)
 
-        # Write docx (zip)
+        # Собираем DOCX
         os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
         with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-            # deterministic ordering
             for name in sorted(package_files.keys()):
                 z.writestr(name, package_files[name])
 
+        print("[recon] DOCX successfully created")
         print("[recon] package_files keys:", list(package_files.keys()))
+
     # =========================
-    # BUILD: document.xml
+    # DOCUMENT MODIFICATION
     # =========================
 
-    def _build_document_xml(self) -> etree._Element:
-        doc = _w_el("document", nsmap={
-            "w": W_NS,
-            "r": R_NS,
-        })
-        body = _w_sub(doc, "body")
+    def _modify_document(self, root: etree._Element, content: List[Dict[str, Any]]) -> None:
+        """
+        Модифицирует document.xml на основе JSON-контента.
+        Заменяет все абзацы в <w:body> на новые из JSON.
+        Сохраняет все остальные элементы (sectPr и пр.)
+        """
+        # Находим body
+        body = root.find(qn_w("body"))
+        if body is None:
+            raise ValueError("Document has no body element")
 
-        for p_item in self.content:
-            p = _w_sub(body, "p")
-            # Сбрасываем флаг первого токена для каждого абзаца (не используется здесь, но оставим для ясности)
-            first_emitted = False
-            style_id = p_item.get("p_style_id") or p_item.get("style_id")
-            runs = p_item.get("runs", [])
+        # Сохраняем все элементы, которые не являются абзацами (sectPr и т.д.)
+        non_paragraphs = []
+        for child in body:
+            if child.tag != qn_w("p"):
+                non_paragraphs.append(child)
 
-            # Создаём pPr и добавляем ссылку на стиль
-            pPr = _w_sub(p, "pPr")
-            if style_id:
-                word_id = self.style_id_to_word.get(style_id, style_id)
-                pStyle = _w_sub(pPr, "pStyle")
-                _set_w_attr(pStyle, "val", word_id)
+        # Очищаем body
+        for child in list(body):
+            body.remove(child)
 
-            # --- ДОБАВЛЯЕМ ЛОКАЛЬНЫЕ СВОЙСТВА АБЗАЦА ---
-            local_p_format = _normalize_p_format(p_item.get("p_format"))
-            if local_p_format:
-                local_pPr = self._build_pPr(local_p_format)
-                if local_pPr is not None:
-                    # Переносим все дочерние элементы из local_pPr в pPr
-                    for child in local_pPr:
-                        pPr.append(child)
-            # -----------------------------------------
-            # Optional direct p_override (if present) – not used in current schema, but could be added
+        # Создаём новые абзацы из JSON
+        for p_item in content:
+            p = self._build_paragraph(p_item)
+            body.append(p)
 
-            # Runs
-            for run in runs:
-                r = _w_sub(p, "r")
-                rtype = run.get("type")
-                print(f"[recon] processing run id={run.get('id')}, type={rtype}")
-                if rtype == "picture":
-                    print(f"[recon] FOUND PICTURE: {run}")
-                # Run properties: schema v2.12 uses r_style_id (+ deprecated char_style_id fallback)
-                run_style_id = run.get("r_style_id") or run.get("char_style_id")
-                run_local_r = _normalize_r_format(run.get("r_format"))
-                if run_style_id or run_local_r:
-                    rPr_el = _w_sub(r, "rPr")
-                    if run_style_id:
-                        rStyle = _w_sub(rPr_el, "rStyle")
-                        word_id = self.style_id_to_word.get(run_style_id, run_style_id)
-                        _set_w_attr(rStyle, "val", word_id)
+        # Добавляем обратно сохранённые элементы (sectPr и др.)
+        for elem in non_paragraphs:
+            body.append(elem)
+
+    def _build_paragraph(self, p_item: Dict[str, Any]) -> etree._Element:
+        """
+        Строит элемент <w:p> из JSON-описания абзаца.
+        """
+        p = _w_el("p")
+
+        style_id = p_item.get("p_style_id") or p_item.get("style_id")
+        runs = p_item.get("runs", [])
+
+        # Создаём pPr
+        pPr = _w_sub(p, "pPr")
+
+        # Добавляем ссылку на стиль
+        if style_id:
+            word_id = self.style_id_to_word.get(style_id, style_id)
+            pStyle = _w_sub(pPr, "pStyle")
+            _set_w_attr(pStyle, "val", word_id)
+
+        # Добавляем локальное форматирование абзаца
+        local_p_format = _normalize_p_format(p_item.get("p_format"))
+        if local_p_format:
+            local_pPr = self._build_pPr(local_p_format)
+            if local_pPr is not None:
+                for child in local_pPr:
+                    pPr.append(child)
+
+        # Добавляем run'ы
+        for run in runs:
+            r = self._build_run(run)
+            if r is not None:
+                p.append(r)
+
+        return p
+
+    def _build_run(self, run: Dict[str, Any]) -> Optional[etree._Element]:
+        """
+        Строит элемент <w:r> из JSON-описания run.
+        """
+        rtype = run.get("type")
+
+        # Обработка разных типов run
+        if rtype == "text":
+            r = _w_el("r")
+            txt = run.get("text", "")
+
+            # Добавляем форматирование
+            run_style_id = run.get("r_style_id") or run.get("char_style_id")
+            run_local_r = _normalize_r_format(run.get("r_format"))
+            if run_style_id or run_local_r:
+                rPr_el = _w_sub(r, "rPr")
+                if run_style_id:
+                    rStyle = _w_sub(rPr_el, "rStyle")
+                    word_id = self.style_id_to_word.get(run_style_id, run_style_id)
+                    _set_w_attr(rStyle, "val", word_id)
+                if run_local_r:
                     local_rPr = self._build_rPr(run_local_r)
                     if local_rPr is not None:
                         for child in local_rPr:
                             rPr_el.append(child)
 
-                # Content
-                if rtype == "text":
-                    txt = run.get("text", "")
-                    t = _w_sub(r, "t")
-                    if _needs_xml_preserve(txt):
-                        t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-                    t.text = txt
+            # Добавляем текст
+            t = _w_sub(r, "t")
+            if _needs_xml_preserve(txt):
+                t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+            t.text = txt
+            return r
 
-                elif rtype == "tab":
-                    _w_sub(r, "tab")
+        elif rtype == "tab":
+            r = _w_el("r")
+            _w_sub(r, "tab")
+            return r
 
-                elif rtype == "break":
-                    br = _w_sub(r, "br")
-                    bt = run.get("break_type")
-                    if bt in ("textWrapping", "page", "column"):
-                        _set_w_attr(br, "type", bt)
+        elif rtype == "break":
+            r = _w_el("r")
+            br = _w_sub(r, "br")
+            bt = run.get("break_type")
+            if bt in ("textWrapping", "page", "column"):
+                _set_w_attr(br, "type", bt)
+            return r
 
-                elif rtype == "cr":
-                    _w_sub(r, "cr")
+        elif rtype == "cr":
+            r = _w_el("r")
+            _w_sub(r, "cr")
+            return r
 
-                elif rtype == "sym":
-                    # In your schema: sym.text is a string; we treat it as literal char if possible.
-                    sym_text = run.get("text", "")
-                    t = _w_sub(r, "t")
-                    if _needs_xml_preserve(sym_text):
-                        t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-                    t.text = sym_text
+        elif rtype == "sym":
+            r = _w_el("r")
+            sym_text = run.get("text", "")
+            t = _w_sub(r, "t")
+            if _needs_xml_preserve(sym_text):
+                t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+            t.text = sym_text
+            return r
 
-                elif rtype == "picture":
-                    if self.donor_media_path is None:
-                        continue
-                    r_pic = _w_sub(p, "r")
-                    # Если есть char_style_id, добавим rStyle
-                    run_style_id = run.get("r_style_id") or run.get("char_style_id")
-                    if run_style_id:
-                        rPr_el = _w_sub(r_pic, "rPr")
-                        rStyle = _w_sub(rPr_el, "rStyle")
-                        word_id = self.style_id_to_word.get(run_style_id, run_style_id)
-                        _set_w_attr(rStyle, "val", word_id)
+        elif rtype == "picture":
+            if self.donor_media_path is None:
+                return None
+            r = _w_el("r")
+            run_style_id = run.get("r_style_id") or run.get("char_style_id")
+            if run_style_id:
+                rPr_el = _w_sub(r, "rPr")
+                rStyle = _w_sub(rPr_el, "rStyle")
+                word_id = self.style_id_to_word.get(run_style_id, run_style_id)
+                _set_w_attr(rStyle, "val", word_id)
 
-                    # Вызываем функцию для добавления drawing
-                    self.next_rel_id = add_picture_to_document(
-                        run_data=run,
-                        parent_element=r_pic,  # исправлено
-                        relationships=self.relationships,
-                        package_files=self.package_files,
-                        donor_media_path=self.donor_media_path,
-                        next_rel_id=self.next_rel_id
-                    )
+            self.next_rel_id = add_picture_to_document(
+                run_data=run,
+                parent_element=r,
+                relationships=self.relationships,
+                package_files=self.package_files,
+                donor_media_path=self.donor_media_path,
+                next_rel_id=self.next_rel_id
+            )
+            return r
 
-                else:
-                    # unsupported run types (softHyphen, noBreakHyphen) – ignore
-                    continue
-
-        # sectPr from document_info.page_setup
-        sectPr = self._build_sectPr(self.document_info.get("page_setup", {}) or {})
-        if sectPr is not None:
-            body.append(sectPr)
-
-        return doc
+        else:
+            # unsupported run types (softHyphen, noBreakHyphen) – ignore
+            return None
 
     # =========================
     # BUILD: pPr from p_format diff
     # =========================
 
     def _build_pPr(self, p_format: Dict[str, Any]) -> Optional[etree._Element]:
+        """
+        Строит элемент <w:pPr> из словаря форматирования (camelCase).
+        """
         if not p_format:
             return None
 
         pPr = _w_el("pPr")
+
         # Alignment
         align = p_format.get("alignment", "").lower()
         if align in ("left", "center", "right", "justify", "distribute"):
@@ -501,7 +592,7 @@ class UltimateReconstructorV12:
             elif lr == "EXACT":
                 _set_w_attr(sp, "lineRule", "exact")
 
-        # ========== НАДЁЖНЫЙ БЛОК ДЛЯ TABS ==========
+        # Tabs
         tabs = p_format.get("tabs")
         if isinstance(tabs, list) and tabs:
             tabs_el = _w_sub(pPr, "tabs")
@@ -518,7 +609,6 @@ class UltimateReconstructorV12:
                 leader = t.get("leader")
                 if leader is not None:
                     _set_w_attr(tab_el, "leader", leader)
-        # =============================================
 
         # Numbering
         num = p_format.get("numbering")
@@ -548,6 +638,7 @@ class UltimateReconstructorV12:
                 if p_format[k] is False:
                     _set_w_attr(el, "val", "0")
 
+        # Text alignment
         text_alignment = p_format.get("textAlignment")
         if text_alignment in ("AUTO", "BASELINE", "TOP", "CENTER", "BOTTOM"):
             ta = _w_sub(pPr, "textAlignment")
@@ -556,10 +647,13 @@ class UltimateReconstructorV12:
         return pPr
 
     # =========================
-    # BUILD: rPr from r_format (diff or absolute)
+    # BUILD: rPr from r_format
     # =========================
 
     def _build_rPr(self, r_format: Dict[str, Any]) -> Optional[etree._Element]:
+        """
+        Строит элемент <w:rPr> из словаря форматирования.
+        """
         if not r_format:
             return None
 
@@ -617,7 +711,7 @@ class UltimateReconstructorV12:
                 caps = _w_sub(rPr, "caps")
                 _set_w_attr(caps, "val", "0")
 
-        # lang (schema v2.12: string; keep dict backward-compat)
+        # lang
         lang = r_format.get("lang")
         if isinstance(lang, str) and lang:
             le = _w_sub(rPr, "lang")
@@ -645,522 +739,11 @@ class UltimateReconstructorV12:
         return rPr
 
     # =========================
-    # BUILD: sectPr
-    # =========================
-
-    def _build_sectPr(self, page_setup: Dict[str, Any]) -> Optional[etree._Element]:
-        # Always create sectPr if any page setup present
-        if not isinstance(page_setup, dict) or not page_setup:
-            # still create minimal sectPr? You said "Page setup обязательно".
-            sectPr = _w_el("sectPr")
-            return sectPr
-
-        sectPr = _w_el("sectPr")
-
-        # pgSz
-        if any(k in page_setup for k in ("pageWidthTwip", "pageHeightTwip", "orient")):
-            pgSz = _w_sub(sectPr, "pgSz")
-            if "pageWidthTwip" in page_setup:
-                _set_w_attr_int(pgSz, "w", page_setup.get("pageWidthTwip"))
-            if "pageHeightTwip" in page_setup:
-                _set_w_attr_int(pgSz, "h", page_setup.get("pageHeightTwip"))
-            orient = page_setup.get("orient")
-            if orient in ("portrait", "landscape"):
-                _set_w_attr(pgSz, "orient", orient)
-
-        # pgMar
-        if any(k in page_setup for k in ("marginLeftTwip", "marginRightTwip", "marginTopTwip", "marginBottomTwip", "headerTwip", "footerTwip", "gutterTwip")):
-            pgMar = _w_sub(sectPr, "pgMar")
-            if "marginTopTwip" in page_setup:
-                _set_w_attr_int(pgMar, "top", page_setup.get("marginTopTwip"))
-            if "marginRightTwip" in page_setup:
-                _set_w_attr_int(pgMar, "right", page_setup.get("marginRightTwip"))
-            if "marginBottomTwip" in page_setup:
-                _set_w_attr_int(pgMar, "bottom", page_setup.get("marginBottomTwip"))
-            if "marginLeftTwip" in page_setup:
-                _set_w_attr_int(pgMar, "left", page_setup.get("marginLeftTwip"))
-            if "headerTwip" in page_setup:
-                _set_w_attr_int(pgMar, "header", page_setup.get("headerTwip"))
-            if "footerTwip" in page_setup:
-                _set_w_attr_int(pgMar, "footer", page_setup.get("footerTwip"))
-            if "gutterTwip" in page_setup:
-                _set_w_attr_int(pgMar, "gutter", page_setup.get("gutterTwip"))
-
-        # cols
-        cols = page_setup.get("cols")
-        if isinstance(cols, dict) and cols:
-            cols_el = _w_sub(sectPr, "cols")
-            if "num" in cols:
-                _set_w_attr_int(cols_el, "num", cols.get("num"))
-            if "spaceTwip" in cols:
-                _set_w_attr_int(cols_el, "space", cols.get("spaceTwip"))
-            if "equalWidth" in cols:
-                _set_w_attr(cols_el, "equalWidth", "1" if cols.get("equalWidth") else "0")
-
-        if "linePitchTwip" in page_setup:
-            docGrid = _w_sub(sectPr, "docGrid")
-            _set_w_attr_int(docGrid, "linePitch", page_setup["linePitchTwip"])
-
-        return sectPr
-
-    # =========================
-    # BUILD: settings.xml
-    # =========================
-
-    def _build_settings_xml(self) -> etree._Element:
-        settings = etree.Element(qn_w("settings"), nsmap={"w": W_NS})
-
-        dts = None
-        doc_settings = (self.document_info.get("settings") or {})
-        if isinstance(doc_settings, dict):
-            dts = doc_settings.get("defaultTabStopTwip")
-
-        if dts is not None:
-            dts_int = _safe_int(dts)
-            if dts_int is not None:
-                el = _w_sub(settings, "defaultTabStop")
-                _set_w_attr(el, "val", dts_int)
-
-        # Добавить языковую тему
-        themeFontLang = _w_sub(settings, "themeFontLang")
-        _set_w_attr(themeFontLang, "val", "ru-RU")
-
-        return settings
-
-    # =========================
-    # BUILD: styles.xml
-    # =========================
-
-    def _build_styles_xml(self) -> etree._Element:
-        styles = etree.Element(qn_w("styles"), nsmap={"w": W_NS})
-
-        # --- docDefaults из self.doc_defaults (или запасной вариант) ---
-        if self.doc_defaults:
-            docDefaults_el = _w_sub(styles, "docDefaults")
-            # rPrDefault
-            rPrDefault_el = _w_sub(docDefaults_el, "rPrDefault")
-            rPr_el = _w_sub(rPrDefault_el, "rPr")
-            r_format_default = self.doc_defaults.get("r_format", {})
-            if r_format_default:
-                built_rPr = self._build_rPr(_normalize_r_format(r_format_default))
-                if built_rPr is not None:
-                    for child in built_rPr:
-                        rPr_el.append(child)
-            # pPrDefault
-            pPrDefault_el = _w_sub(docDefaults_el, "pPrDefault")
-            p_format_default = self.doc_defaults.get("p_format", {})
-            if p_format_default:
-                built_pPr = self._build_pPr(_normalize_p_format(p_format_default))
-                if built_pPr is not None:
-                    pPrDefault_el.append(built_pPr)
-            else:
-                _w_sub(pPrDefault_el, "pPr")
-        else:
-            # Запасной вариант (как было раньше)
-            docDefaults_el = _w_sub(styles, "docDefaults")
-            rPrDefault_el = _w_sub(docDefaults_el, "rPrDefault")
-            rPr_el = _w_sub(rPrDefault_el, "rPr")
-            # rFonts из NORMAL_R_FORMAT
-            if "rFonts" in NORMAL_R_FORMAT:
-                rf = _w_sub(rPr_el, "rFonts")
-                for k, v in NORMAL_R_FORMAT["rFonts"].items():
-                    if v:
-                        _set_w_attr(rf, k, v)
-            # lang
-            if "lang" in NORMAL_R_FORMAT:
-                lang_el = _w_sub(rPr_el, "lang")
-                for k, v in NORMAL_R_FORMAT["lang"].items():
-                    if v:
-                        _set_w_attr(lang_el, k, v)
-            # размер шрифта
-            sz_val = NORMAL_R_FORMAT.get("font_size_half_points", 24)
-            sz = _w_sub(rPr_el, "sz")
-            _set_w_attr_int(sz, "val", sz_val)
-            szCs = _w_sub(rPr_el, "szCs")
-            _set_w_attr_int(szCs, "val", sz_val)
-            pPrDefault_el = _w_sub(docDefaults_el, "pPrDefault")
-            _w_sub(pPrDefault_el, "pPr")
-
-        # --- latent_styles ---
-        if self.latent_styles:
-            latent_el = _w_sub(styles, "latentStyles")
-            ls = self.latent_styles
-            if "defaultLockedState" in ls:
-                _set_w_attr(latent_el, "defLockedState", "1" if ls["defaultLockedState"] else "0")
-            if "defaultSemiHiddenState" in ls:
-                _set_w_attr(latent_el, "defSemiHidden", "1" if ls["defaultSemiHiddenState"] else "0")
-            if "defaultUnhideWhenUsedState" in ls:
-                _set_w_attr(latent_el, "defUnhideWhenUsed", "1" if ls["defaultUnhideWhenUsedState"] else "0")
-            if "defaultQFormatState" in ls:
-                _set_w_attr(latent_el, "defQFormat", "1" if ls["defaultQFormatState"] else "0")
-            if "defaultUiPriority" in ls:
-                _set_w_attr_int(latent_el, "defUIPriority", ls["defaultUiPriority"])
-
-            exceptions = ls.get("exceptions")
-            if isinstance(exceptions, dict):
-                for name, props in exceptions.items():
-                    lsd = _w_sub(latent_el, "lsdException")
-                    _set_w_attr(lsd, "name", name)
-                    if "locked" in props:
-                        _set_w_attr(lsd, "locked", "1" if props["locked"] else "0")
-                    if "semiHidden" in props:
-                        _set_w_attr(lsd, "semiHidden", "1" if props["semiHidden"] else "0")
-                    if "unhideWhenUsed" in props:
-                        _set_w_attr(lsd, "unhideWhenUsed", "1" if props["unhideWhenUsed"] else "0")
-                    if "qFormat" in props:
-                        _set_w_attr(lsd, "qFormat", "1" if props["qFormat"] else "0")
-                    if "uiPriority" in props:
-                        _set_w_attr_int(lsd, "uiPriority", props["uiPriority"])
-
-        # --- Все стили из self.styles ---
-        for sid, st in self.styles.items():
-            st_type = st.get("type")
-            if st_type not in ("paragraph", "character", "table", "numbering"):
-                continue
-
-            word_id = st.get("word_style_id", sid)
-            # Базовые атрибуты
-            attrib = {
-                f"{{{W_NS}}}type": st_type,
-                f"{{{W_NS}}}styleId": word_id,
-            }
-            if st.get("is_default"):
-                attrib[f"{{{W_NS}}}default"] = "1"
-
-            style_el = _w_sub(styles, "style", attrib=attrib)
-
-            # name
-            name_val = st.get("name")
-            if not isinstance(name_val, str) or not name_val:
-                name_val = sid
-            name_el = _w_sub(style_el, "name")
-            _set_w_attr(name_el, "val", name_val)
-
-            # basedOn
-            based_on = st.get("based_on")
-            if based_on:
-                based_el = _w_sub(style_el, "basedOn")
-                _set_w_attr(based_el, "val", based_on)
-
-            # link (для linked styles)
-            link = st.get("link")
-            if link:
-                link_el = _w_sub(style_el, "link")
-                _set_w_attr(link_el, "val", link)
-
-            # ui_priority
-            ui_priority = st.get("ui_priority")
-            if ui_priority is not None:
-                _set_w_attr_int(style_el, "uiPriority", ui_priority)
-
-            # q_format
-            if st.get("q_format"):
-                _w_sub(style_el, "qFormat")
-
-            # p_format (только для paragraph)
-            if st_type == "paragraph":
-                p_format = st.get("p_format", {})
-                if p_format:
-                    norm_p = _normalize_p_format(p_format)
-                    pPr_el = self._build_pPr(norm_p)
-                    if pPr_el is not None:
-                        style_el.append(pPr_el)
-
-                # Если стиль связан с нумерацией через pStyle в numbering.xml, но не имеет явного list_info,
-                # добавляем numPr в pPr стиля.
-                if sid in self.style_to_num:
-                    # Проверяем, есть ли уже list_info в p_format (явная нумерация)
-                    has_explicit_num = bool(p_format.get("list_info"))
-                    if not has_explicit_num:
-                        numId, ilvl = self.style_to_num[sid]
-                        # Ищем существующий pPr_el или создаём новый
-                        existing_pPr = None
-                        for child in style_el:
-                            if child.tag == qn_w("pPr"):
-                                existing_pPr = child
-                                break
-                        if existing_pPr is None:
-                            existing_pPr = _w_sub(style_el, "pPr")
-                        # Добавляем numPr
-                        numPr = _w_sub(existing_pPr, "numPr")
-                        ilvl_el = _w_sub(numPr, "ilvl")
-                        _set_w_attr(ilvl_el, "val", ilvl)
-                        numId_el = _w_sub(numPr, "numId")
-                        _set_w_attr(numId_el, "val", numId)
-
-            # r_format для paragraph и character
-            r_format = st.get("r_format", {})
-            if r_format:
-                rPr_el = self._build_rPr(_normalize_r_format(r_format))
-                if rPr_el is not None:
-                    style_el.append(rPr_el)
-
-            # При необходимости можно добавить обработку других полей (next, ui_priority и т.д.)
-
-        # Не создаём отдельно стиль Normal – он уже будет обработан, если присутствует в self.styles.
-
-        return styles
-
-
-
-    # =========================
-    # BUILD: numbering.xml
-    # =========================
-
-    def _build_numbering_xml(self) -> etree._Element:
-        numbering = etree.Element(qn_w("numbering"), nsmap={"w": W_NS})
-
-        # Collect abstractNum definitions by abstractNumId from JSON records
-        abstract_map: Dict[str, Dict[str, Any]] = {}
-        for numId, rec in self.numbering_definitions.items():
-            abs_id = rec.get("abstractNumId")
-            levels = rec.get("levels", {}) or {}
-            multi_level_type = rec.get("multiLevelType")
-            if abs_id is None:
-                raise ValueError(f"Contract violation: missing abstractNumId for numId={numId} in numbering. Run effective materializer or preserve numbering mappings.")
-            if abs_id not in abstract_map:
-                abstract_map[abs_id] = {"levels": levels, "multiLevelType": multi_level_type}
-            else:
-                # keep first; deterministic
-                pass
-
-        # Write abstractNum in sorted order for determinism
-        for abs_id in sorted(abstract_map.keys(), key=lambda x: str(x)):
-            abs_el = _w_sub(numbering, "abstractNum", attrib={f"{{{W_NS}}}abstractNumId": str(abs_id)})
-
-            multi_level_type = abstract_map[abs_id].get("multiLevelType")
-            if isinstance(multi_level_type, str):
-                mlt_el = _w_sub(abs_el, "multiLevelType")
-                _set_w_attr(mlt_el, "val", multi_level_type)
-
-            levels = abstract_map[abs_id].get("levels", {}) or {}
-            for ilvl_str in sorted(levels.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
-                lvl_rec = levels[ilvl_str] or {}
-                fmt = lvl_rec.get("format")
-                if not isinstance(fmt, str):
-                    continue
-
-                template = lvl_rec.get("template")
-                if not isinstance(template, str):
-                    continue
-
-                lvl_el = _w_sub(abs_el, "lvl", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
-
-                if "start" in lvl_rec:
-                    sv = _safe_int(lvl_rec.get("start"))
-                    if sv is not None:
-                        start = _w_sub(lvl_el, "start")
-                        _set_w_attr(start, "val", sv)
-
-                numFmt = _w_sub(lvl_el, "numFmt")
-                _set_w_attr(numFmt, "val", fmt)
-
-                lvlText = _w_sub(lvl_el, "lvlText")
-                _set_w_attr(lvlText, "val", template)
-
-                if "tabPosTwip" in lvl_rec:
-                    tab_pos = _safe_int(lvl_rec.get("tabPosTwip"))
-                    if tab_pos is not None:
-                        tab_el = _w_sub(lvl_el, "tab")
-                        _set_w_attr(tab_el, "val", tab_pos)
-
-                lvl_jc = lvl_rec.get("lvlJc")
-                if isinstance(lvl_jc, str):
-                    el = _w_sub(lvl_el, "lvlJc")
-                    _set_w_attr(el, "val", lvl_jc)
-
-                suff = lvl_rec.get("suff")
-                if isinstance(suff, str):
-                    el = _w_sub(lvl_el, "suff")
-                    _set_w_attr(el, "val", suff)
-
-                p_style = lvl_rec.get("pStyle")
-                if isinstance(p_style, str):
-                    el = _w_sub(lvl_el, "pStyle")
-                    _set_w_attr(el, "val", p_style)
-
-                level_ppr = lvl_rec.get("level_pPr")
-                if isinstance(level_ppr, dict):
-                    pPr_el = _w_sub(lvl_el, "pPr")
-
-                    if any(k in level_ppr for k in ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")):
-                        ind_el = _w_sub(pPr_el, "ind")
-                        _set_w_attr_int(ind_el, "left", level_ppr.get("indentStartTwip"))
-                        _set_w_attr_int(ind_el, "right", level_ppr.get("indentEndTwip"))
-                        _set_w_attr_int(ind_el, "firstLine", level_ppr.get("indentFirstLineTwip"))
-                        _set_w_attr_int(ind_el, "hanging", level_ppr.get("indentHangingTwip"))
-
-                    tabs = level_ppr.get("tabs")
-                    if isinstance(tabs, list) and tabs:
-                        tabs_el = _w_sub(pPr_el, "tabs")
-                        for tab in tabs:
-                            if not isinstance(tab, dict):
-                                continue
-                            pos = _safe_int(tab.get("posTwip"))
-                            val = tab.get("val")
-                            if pos is None or not isinstance(val, str):
-                                continue
-                            tab_el = _w_sub(tabs_el, "tab")
-                            _set_w_attr(tab_el, "pos", pos)
-                            _set_w_attr(tab_el, "val", val)
-                            leader = tab.get("leader")
-                            if isinstance(leader, str):
-                                _set_w_attr(tab_el, "leader", leader)
-
-                level_rpr = lvl_rec.get("level_rPr")
-                if isinstance(level_rpr, dict) and level_rpr:
-                    rpr_el = self._build_rPr(level_rpr)
-                    if rpr_el is not None:
-                        lvl_el.append(rpr_el)
-
-        # Write nums
-        for numId in sorted(self.numbering_definitions.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
-            rec = self.numbering_definitions[numId] or {}
-            num_el = _w_sub(numbering, "num", attrib={f"{{{W_NS}}}numId": str(numId)})
-
-            abs_id = rec.get("abstractNumId")
-            if abs_id is None:
-                raise ValueError(f"Contract violation: missing abstractNumId for numId={numId} in numbering. Run effective materializer or preserve numbering mappings.")
-
-            abs_ref = _w_sub(num_el, "abstractNumId")
-            _set_w_attr(abs_ref, "val", str(abs_id))
-
-            # lvl overrides
-            ovs = rec.get("lvl_overrides", {}) or {}
-            if isinstance(ovs, dict) and ovs:
-                for ilvl_str in sorted(ovs.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
-                    ov = ovs[ilvl_str] or {}
-                    if "start" in ov:
-                        ov_start = _safe_int(ov.get("start"))
-                        if ov_start is not None:
-                            lvlOv = _w_sub(num_el, "lvlOverride", attrib={f"{{{W_NS}}}ilvl": str(ilvl_str)})
-                            st = _w_sub(lvlOv, "startOverride")
-                            _set_w_attr(st, "val", ov_start)
-
-        return numbering
-
-    # =========================
-    # RELATIONSHIPS & CONTENT TYPES
-    # =========================
-
-    def _build_root_rels(self) -> etree._Element:
-        rels = etree.Element(f"{{{PR_NS}}}Relationships", nsmap={None: PR_NS})
-
-        rel = etree.SubElement(rels, f"{{{PR_NS}}}Relationship")
-        rel.set("Id", "rId1")
-        rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument")
-        rel.set("Target", "word/document.xml")
-
-        return rels
-
-    def _build_document_rels(self, has_numbering: bool, has_styles: bool, has_settings: bool,
-                             image_rels: Dict[str, str]) -> etree._Element:
-        rels = etree.Element(f"{{{PR_NS}}}Relationships", nsmap={None: PR_NS})
-
-        rid = 1
-        if has_styles:
-            rel = etree.SubElement(rels, f"{{{PR_NS}}}Relationship")
-            rel.set("Id", f"rId{rid}")
-            rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles")
-            rel.set("Target", "styles.xml")
-            rid += 1
-
-        if has_numbering:
-            rel = etree.SubElement(rels, f"{{{PR_NS}}}Relationship")
-            rel.set("Id", f"rId{rid}")
-            rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering")
-            rel.set("Target", "numbering.xml")
-            rid += 1
-
-        if has_settings:
-            rel = etree.SubElement(rels, f"{{{PR_NS}}}Relationship")
-            rel.set("Id", f"rId{rid}")
-            rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings")
-            rel.set("Target", "settings.xml")
-            rid += 1
-
-        # images
-        for r_id, target in (image_rels or {}).items():
-            rel = etree.SubElement(rels, f"{{{PR_NS}}}Relationship")
-            rel.set("Id", r_id)
-            rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
-            # normalize Target
-            t = (target or "").lstrip("/")
-            if t.startswith("word/"):
-                t = t[len("word/"):]
-            rel.set("Target", t)
-
-        return rels
-
-    def _build_content_types(self, has_numbering: bool, has_styles: bool, has_settings: bool) -> etree._Element:
-        types = etree.Element(f"{{{CT_NS}}}Types", nsmap={None: CT_NS})
-
-        # Defaults
-        d1 = etree.SubElement(types, f"{{{CT_NS}}}Default")
-        d1.set("Extension", "rels")
-        d1.set("ContentType", "application/vnd.openxmlformats-package.relationships+xml")
-
-        d2 = etree.SubElement(types, f"{{{CT_NS}}}Default")
-        d2.set("Extension", "xml")
-        d2.set("ContentType", "application/xml")
-
-        # Overrides
-        o1 = etree.SubElement(types, f"{{{CT_NS}}}Override")
-        o1.set("PartName", "/word/document.xml")
-        o1.set("ContentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml")
-
-        if has_styles:
-            o = etree.SubElement(types, f"{{{CT_NS}}}Override")
-            o.set("PartName", "/word/styles.xml")
-            o.set("ContentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml")
-
-        if has_numbering:
-            o = etree.SubElement(types, f"{{{CT_NS}}}Override")
-            o.set("PartName", "/word/numbering.xml")
-            o.set("ContentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml")
-
-        if has_settings:
-            o = etree.SubElement(types, f"{{{CT_NS}}}Override")
-            o.set("PartName", "/word/settings.xml")
-            o.set("ContentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml")
-
-        # Images: defaults per extension used (deterministic), fail-fast on unknown extensions
-        mime_map = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".bmp": "image/bmp",
-            ".tif": "image/tiff",
-            ".tiff": "image/tiff",
-            ".wmf": "image/x-wmf",
-            ".emf": "image/x-emf",
-        }
-
-        added = set()
-        for target in (self.relationships or {}).values():
-            t = (target or "").lstrip("/")
-            if t.startswith("word/"):
-                t = t[len("word/"):]
-            ext = os.path.splitext(t)[1].lower()
-            if not ext or ext in added:
-                continue
-            ct = mime_map.get(ext)
-            if not ct:
-                raise ValueError(
-                    f"Contract violation: unsupported image extension for content types: {ext} (target={t})")
-            d = etree.SubElement(types, f"{{{CT_NS}}}Default")
-            d.set("Extension", ext.lstrip("."))
-            d.set("ContentType", ct)
-            added.add(ext)
-
-        return types
-
-    # =========================
     # HELPERS
     # =========================
 
     def _dump_reconstructed_parts(self, package_files: Dict[str, bytes], out_root_dir: str) -> None:
+        """Сохраняет все части пакета для отладки"""
         os.makedirs(out_root_dir, exist_ok=True)
         for name, data in sorted(package_files.items()):
             if not (name.endswith(".xml") or name.endswith(".rels")):
@@ -1183,8 +766,10 @@ class UltimateReconstructorV12:
 if __name__ == "__main__":
     try:
         cli = argparse.ArgumentParser(description="UltimateReconstructorV12 RAW JSON -> DOCX")
-        cli.add_argument("--in-json", dest="input_json", default=os.path.join(BASE_DIR, "donor_v2.6.json"))
-        cli.add_argument("--out-docx", dest="output_docx", default=os.path.join(BASE_DIR, "donor_v2.6_reconstructed.docx"))
+        cli.add_argument("--in-json", dest="input_json", required=True,
+                         help="Path to input JSON file")
+        cli.add_argument("--out-docx", dest="output_docx", required=True,
+                         help="Path to output DOCX file")
         args = cli.parse_args()
 
         recon = UltimateReconstructorV12(args.input_json)
@@ -1192,4 +777,6 @@ if __name__ == "__main__":
         print("Реконструкция v12 завершена успешно!")
     except Exception:
         import traceback
+
         traceback.print_exc()
+        sys.exit(1)

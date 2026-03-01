@@ -207,12 +207,12 @@ def reconstruct_docx_opt(context: AssetExecutionContext, input_docx_path: str) -
         },
     )
 
-@asset(non_argument_deps={"materialize_effective"})
+@asset(non_argument_deps={"parse_raw_json"})
 def reconstruct_docx(context: AssetExecutionContext, input_docx_path: str) -> Output[Nothing]:
     p = _mk_run_paths(context, Path(input_docx_path))
     py = sys.executable
 
-    _run_cmd(context, [py, "src/reconstructor.py", "--in-json", str(p.effective_json), "--out-docx", str(p.reconstructed_docx)], "recon")
+    _run_cmd(context, [py, "src/reconstructor.py", "--in-json", str(p.raw_json), "--out-docx", str(p.reconstructed_docx)], "recon")
     _extract_docx_raw(context, p.reconstructed_docx, p.raw_reconstructed, "raw_reconstructed")
 
     return Output(

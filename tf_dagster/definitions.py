@@ -16,7 +16,6 @@ full_run_job = define_asset_job(
         "input_docx_path",
         "saveas_materialized",
         "parse_raw_json",
-        "materialize_effective",
         "reconstruct_docx",
     ),
 )

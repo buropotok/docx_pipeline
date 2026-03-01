@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://translatefactory/schema/raw/2.12",
-  "title": "Standard RAW JSON Schema v2.12 (Word styles imported + run overrides)",
+  "title": "Standard RAW JSON Schema v2.12 (Word styles imported + run overrides + tables)",
   "version": "2.12",
   "type": "object",
   "required": [
@@ -23,160 +23,6 @@
         "justify",
         "distribute"
       ]
-    },
-    "shapeExtent": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "cx": {
-          "type": "integer",
-          "description": "Ширина фигуры в EMU"
-        },
-        "cy": {
-          "type": "integer",
-          "description": "Высота фигуры в EMU"
-        }
-      },
-      "required": ["cx", "cy"]
-    },
-    "shapeTransform": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "rotation": {
-          "type": "integer",
-          "description": "Угол поворота в 60-тысячных долях градуса (90° = 5 400 000)"
-        },
-        "flipH": {
-          "type": "boolean",
-          "description": "Отразить по горизонтали"
-        },
-        "flipV": {
-          "type": "boolean",
-          "description": "Отразить по вертикали"
-        }
-      }
-    },
-    "shapeFill": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "color": {
-          "type": "string",
-          "description": "Цвет заливки в формате RGB (например, 'FF0000')"
-        },
-        "alpha": {
-          "type": "integer",
-          "description": "Прозрачность (0–100000)"
-        }
-      }
-    },
-    "shapeOutline": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "width": {
-          "type": "integer",
-          "description": "Толщина линии в EMU (1 pt = 12 700 EMU)"
-        },
-        "color": {
-          "type": "string",
-          "description": "Цвет линии"
-        },
-        "alpha": {
-          "type": "integer",
-          "description": "Прозрачность линии"
-        },
-        "dashStyle": {
-          "type": "string",
-          "enum": ["solid", "dash", "dot", "dashDot", "dashDotDot"],
-          "description": "Стиль пунктира"
-        }
-      }
-    },
-    "shapeText": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "content": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/run" },
-          "description": "Массив run'ов внутри фигуры (аналогично содержимому абзаца)"
-        },
-        "margins": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "left": { "type": "integer" },
-            "right": { "type": "integer" },
-            "top": { "type": "integer" },
-            "bottom": { "type": "integer" }
-          }
-        },
-        "verticalAnchor": {
-          "type": "string",
-          "enum": ["top", "middle", "bottom"],
-          "description": "Вертикальное выравнивание текста внутри фигуры"
-        }
-      }
-    },
-    "shapePositioning": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "relativeFrom": {
-          "type": "string",
-          "enum": ["page", "column", "character", "margin"],
-          "description": "Относительно чего позиционируется фигура"
-        },
-        "horizontalPos": {
-          "type": "integer",
-          "description": "Горизонтальное смещение в EMU"
-        },
-        "verticalPos": {
-          "type": "integer",
-          "description": "Вертикальное смещение в EMU"
-        },
-        "allowOverlap": {
-          "type": "boolean",
-          "description": "Разрешить перекрытие"
-        }
-      }
-    },
-    "shapeProperties": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "shapeType": {
-          "type": "string",
-          "description": "Тип фигуры (предопределённое имя, например 'rect', 'ellipse', 'line', 'roundRect')"
-        },
-        "extent": {
-          "$ref": "#/$defs/shapeExtent",
-          "description": "Размеры фигуры в EMU"
-        },
-        "transform": {
-          "$ref": "#/$defs/shapeTransform",
-          "description": "Преобразования (поворот, отражение)"
-        },
-        "fill": {
-          "$ref": "#/$defs/shapeFill",
-          "description": "Заливка фигуры"
-        },
-        "outline": {
-          "$ref": "#/$defs/shapeOutline",
-          "description": "Обводка фигуры"
-        },
-        "text": {
-          "$ref": "#/$defs/shapeText",
-          "description": "Текстовое содержимое фигуры"
-        },
-        "positioning": {
-          "$ref": "#/$defs/shapePositioning",
-          "description": "Позиционирование (для плавающих фигур)"
-        }
-      },
-      "required": ["shapeType", "extent"]
     },
     "breakTypeEnum": {
       "type": "string",
@@ -528,6 +374,160 @@
         }
       ]
     },
+    "shapeExtent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cx": {
+          "type": "integer",
+          "description": "Ширина фигуры в EMU"
+        },
+        "cy": {
+          "type": "integer",
+          "description": "Высота фигуры в EMU"
+        }
+      },
+      "required": ["cx", "cy"]
+    },
+    "shapeTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rotation": {
+          "type": "integer",
+          "description": "Угол поворота в 60-тысячных долях градуса (90° = 5 400 000)"
+        },
+        "flipH": {
+          "type": "boolean",
+          "description": "Отразить по горизонтали"
+        },
+        "flipV": {
+          "type": "boolean",
+          "description": "Отразить по вертикали"
+        }
+      }
+    },
+    "shapeFill": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "string",
+          "description": "Цвет заливки в формате RGB (например, 'FF0000')"
+        },
+        "alpha": {
+          "type": "integer",
+          "description": "Прозрачность (0–100000)"
+        }
+      }
+    },
+    "shapeOutline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "integer",
+          "description": "Толщина линии в EMU (1 pt = 12 700 EMU)"
+        },
+        "color": {
+          "type": "string",
+          "description": "Цвет линии"
+        },
+        "alpha": {
+          "type": "integer",
+          "description": "Прозрачность линии"
+        },
+        "dashStyle": {
+          "type": "string",
+          "enum": ["solid", "dash", "dot", "dashDot", "dashDotDot"],
+          "description": "Стиль пунктира"
+        }
+      }
+    },
+    "shapeText": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/run" },
+          "description": "Массив run'ов внутри фигуры (аналогично содержимому абзаца)"
+        },
+        "margins": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "left": { "type": "integer" },
+            "right": { "type": "integer" },
+            "top": { "type": "integer" },
+            "bottom": { "type": "integer" }
+          }
+        },
+        "verticalAnchor": {
+          "type": "string",
+          "enum": ["top", "middle", "bottom"],
+          "description": "Вертикальное выравнивание текста внутри фигуры"
+        }
+      }
+    },
+    "shapePositioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relativeFrom": {
+          "type": "string",
+          "enum": ["page", "column", "character", "margin"],
+          "description": "Относительно чего позиционируется фигура"
+        },
+        "horizontalPos": {
+          "type": "integer",
+          "description": "Горизонтальное смещение в EMU"
+        },
+        "verticalPos": {
+          "type": "integer",
+          "description": "Вертикальное смещение в EMU"
+        },
+        "allowOverlap": {
+          "type": "boolean",
+          "description": "Разрешить перекрытие"
+        }
+      }
+    },
+    "shapeProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shapeType": {
+          "type": "string",
+          "description": "Тип фигуры (предопределённое имя, например 'rect', 'ellipse', 'line', 'roundRect')"
+        },
+        "extent": {
+          "$ref": "#/$defs/shapeExtent",
+          "description": "Размеры фигуры в EMU"
+        },
+        "transform": {
+          "$ref": "#/$defs/shapeTransform",
+          "description": "Преобразования (поворот, отражение)"
+        },
+        "fill": {
+          "$ref": "#/$defs/shapeFill",
+          "description": "Заливка фигуры"
+        },
+        "outline": {
+          "$ref": "#/$defs/shapeOutline",
+          "description": "Обводка фигуры"
+        },
+        "text": {
+          "$ref": "#/$defs/shapeText",
+          "description": "Текстовое содержимое фигуры"
+        },
+        "positioning": {
+          "$ref": "#/$defs/shapePositioning",
+          "description": "Позиционирование (для плавающих фигур)"
+        }
+      },
+      "required": ["shapeType", "extent"]
+    },
     "tabStop": {
       "type": "object",
       "additionalProperties": false,
@@ -556,6 +556,111 @@
         "center",
         "bottom"
       ]
+    },
+    "paragraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "p_style_id",
+        "runs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "paragraph"
+        },
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор абзаца"
+        },
+        "p_style_id": {
+          "type": "string",
+          "description": "Paragraph styleId (w:pStyle/@w:val) — ключ в styles."
+        },
+        "p_format": {
+          "$ref": "#/$defs/pFormat",
+          "description": "Inline override для paragraph properties (w:pPr), поверх стиля."
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/run"
+          }
+        },
+        "source_word_style_id": {
+          "type": "string",
+          "description": "[DEPRECATED] Старое поле для отладки/трассировки."
+        }
+      }
+    },
+    "tableCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор ячейки (опционально)"
+        },
+        "content": {
+          "type": "array",
+          "description": "Содержимое ячейки (массив абзацев)",
+          "items": {
+            "$ref": "#/$defs/paragraph"
+          }
+        }
+      }
+    },
+    "tableRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "cells"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор строки (сквозной, сохраняется во всём пайплайне)"
+        },
+        "cells": {
+          "type": "array",
+          "description": "Ячейки строки (порядок важен)",
+          "items": {
+            "$ref": "#/$defs/tableCell"
+          }
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "rows"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "table"
+        },
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор таблицы (сквозной, сохраняется во всём пайплайне)"
+        },
+        "tbl_style_id": {
+          "type": "string",
+          "description": "Идентификатор стиля таблицы (ключ в styles) — опционально, если не меняется"
+        },
+        "rows": {
+          "type": "array",
+          "description": "Строки таблицы (порядок определяет итоговый документ)",
+          "items": {
+            "$ref": "#/$defs/tableRow"
+          }
+        }
+      }
+    },
+    "contentItem": {
+      "oneOf": [
+        { "$ref": "#/$defs/paragraph" },
+        { "$ref": "#/$defs/table" }
+      ]
     }
   },
   "properties": {
@@ -568,8 +673,24 @@
         },
         "schema_version": {
           "type": "string"
+        },
+        "default_style_id": {
+          "type": "string"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
         }
-      }
+      },
+      "required": ["schema_version"]
     },
     "document_info": {
       "type": "object",
@@ -628,6 +749,9 @@
                   "type": "boolean"
                 }
               }
+            },
+            "linePitchTwip": {
+              "type": "integer"
             }
           }
         },
@@ -881,33 +1005,9 @@
     },
     "content": {
       "type": "array",
+      "description": "Содержимое документа (абзацы и таблицы)",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "p_style_id",
-          "runs"
-        ],
-        "properties": {
-          "p_style_id": {
-            "type": "string",
-            "description": "Paragraph styleId (w:pStyle/@w:val) — ключ в styles."
-          },
-          "p_format": {
-            "$ref": "#/$defs/pFormat",
-            "description": "Inline override для paragraph properties (w:pPr), поверх стиля."
-          },
-          "runs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/run"
-            }
-          },
-          "source_word_style_id": {
-            "type": "string",
-            "description": "[DEPRECATED] Старое поле для отладки/трассировки."
-          }
-        }
+        "$ref": "#/$defs/contentItem"
       }
     }
   }

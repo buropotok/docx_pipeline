@@ -332,6 +332,7 @@ class UltimateParserV43:
             "exact": "exact",
         }
         key_map = {
+            # Существующие поля
             "lineTwip": "line_spacing_twip",
             "spaceBeforeTwip": "space_before_twip",
             "spaceAfterTwip": "space_after_twip",
@@ -343,6 +344,12 @@ class UltimateParserV43:
             "keepLines": "keep_lines",
             "pageBreakBefore": "page_break_before",
             "widowControl": "widow_control",
+            "contextualSpacing": "contextual_spacing",
+            "snapToGrid": "snap_to_grid",
+            "beforeAutospacing": "before_autospacing",
+            "afterAutospacing": "after_autospacing",
+            "spaceBeforeLines": "space_before_lines",
+            "spaceAfterLines": "space_after_lines",
         }
         for k, v in old.items():
             if v is None:
