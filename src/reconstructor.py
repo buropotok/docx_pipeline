@@ -200,8 +200,9 @@ class UltimateReconstructorV12:
         self.meta: Dict[str, Any] = self.data.get("meta", {})
         self.document_info: Dict[str, Any] = self.data.get("document_info", {})
         self.numbering_definitions: Dict[str, Any] = self.data.get("numbering_definitions", {})
-        self.styles: Dict[str, Any] = self.data.get("styles", {})          # paragraph styles (diff)
-        self.char_styles: Dict[str, Any] = self.data.get("character_styles", {})
+        self.styles: Dict[str, Any] = self.data.get("styles", {})          # все стили (paragraph, character, ...)
+        self.doc_defaults: Dict[str, Any] = self.data.get("doc_defaults", {})
+        self.latent_styles: Dict[str, Any] = self.data.get("latent_styles", {})
         self.content: List[Dict[str, Any]] = self.data.get("content", [])
 
         self.default_style_id: Optional[str] = self.meta.get("default_style_id")
@@ -210,11 +211,23 @@ class UltimateReconstructorV12:
         self.style_id_to_word: Dict[str, str] = {}
         for sid, st in self.styles.items():
             self.style_id_to_word[sid] = st.get("word_style_id", sid)
-        for cid, st in self.char_styles.items():
-            self.style_id_to_word[cid] = st.get("word_style_id", cid)
 
         # Build map for numbering pStyle replacement (if needed)
         self._prepare_numbering_pstyles()
+
+        # Build map: style_id -> (numId, ilvl) for styles referenced in numbering levels via pStyle
+        self.style_to_num: Dict[str, Tuple[str, int]] = {}
+        for numId, rec in self.numbering_definitions.items():
+            levels = rec.get("levels", {})
+            for ilvl_str, lvl in levels.items():
+                pStyle = lvl.get("pStyle")
+                if pStyle and isinstance(pStyle, str):
+                    try:
+                        ilvl = int(ilvl_str)
+                        if pStyle not in self.style_to_num:
+                            self.style_to_num[pStyle] = (str(numId), ilvl)
+                    except ValueError:
+                        pass
 
         # Для работы с изображениями
         self.relationships: Dict[str, str] = {}  # будет заполняться при добавлении картинок
@@ -318,12 +331,14 @@ class UltimateReconstructorV12:
     def _build_document_xml(self) -> etree._Element:
         doc = _w_el("document", nsmap={
             "w": W_NS,
-            "r": R_NS
+            "r": R_NS,
         })
         body = _w_sub(doc, "body")
 
         for p_item in self.content:
             p = _w_sub(body, "p")
+            # Сбрасываем флаг первого токена для каждого абзаца (не используется здесь, но оставим для ясности)
+            first_emitted = False
             style_id = p_item.get("p_style_id") or p_item.get("style_id")
             runs = p_item.get("runs", [])
 
@@ -437,10 +452,13 @@ class UltimateReconstructorV12:
 
         pPr = _w_el("pPr")
         # Alignment
-        align = p_format.get("alignment")
-        if align in ("LEFT", "CENTER", "RIGHT", "JUSTIFY"):
+        align = p_format.get("alignment", "").lower()
+        if align in ("left", "center", "right", "justify", "distribute"):
             jc = _w_sub(pPr, "jc")
-            _set_w_attr(jc, "val", align.lower() if align != "JUSTIFY" else "both")
+            if align == "justify":
+                _set_w_attr(jc, "val", "both")
+            else:
+                _set_w_attr(jc, "val", align)
 
         # Indents
         ind_keys = ("indentStartTwip", "indentEndTwip", "indentFirstLineTwip", "indentHangingTwip")
@@ -716,98 +734,174 @@ class UltimateReconstructorV12:
     def _build_styles_xml(self) -> etree._Element:
         styles = etree.Element(qn_w("styles"), nsmap={"w": W_NS})
 
-        # --- docDefaults ---
-        docDefaults = _w_sub(styles, "docDefaults")
-        rPrDefault = _w_sub(docDefaults, "rPrDefault")
-        rPr = _w_sub(rPrDefault, "rPr")
+        # --- docDefaults из self.doc_defaults (или запасной вариант) ---
+        if self.doc_defaults:
+            docDefaults_el = _w_sub(styles, "docDefaults")
+            # rPrDefault
+            rPrDefault_el = _w_sub(docDefaults_el, "rPrDefault")
+            rPr_el = _w_sub(rPrDefault_el, "rPr")
+            r_format_default = self.doc_defaults.get("r_format", {})
+            if r_format_default:
+                built_rPr = self._build_rPr(_normalize_r_format(r_format_default))
+                if built_rPr is not None:
+                    for child in built_rPr:
+                        rPr_el.append(child)
+            # pPrDefault
+            pPrDefault_el = _w_sub(docDefaults_el, "pPrDefault")
+            p_format_default = self.doc_defaults.get("p_format", {})
+            if p_format_default:
+                built_pPr = self._build_pPr(_normalize_p_format(p_format_default))
+                if built_pPr is not None:
+                    pPrDefault_el.append(built_pPr)
+            else:
+                _w_sub(pPrDefault_el, "pPr")
+        else:
+            # Запасной вариант (как было раньше)
+            docDefaults_el = _w_sub(styles, "docDefaults")
+            rPrDefault_el = _w_sub(docDefaults_el, "rPrDefault")
+            rPr_el = _w_sub(rPrDefault_el, "rPr")
+            # rFonts из NORMAL_R_FORMAT
+            if "rFonts" in NORMAL_R_FORMAT:
+                rf = _w_sub(rPr_el, "rFonts")
+                for k, v in NORMAL_R_FORMAT["rFonts"].items():
+                    if v:
+                        _set_w_attr(rf, k, v)
+            # lang
+            if "lang" in NORMAL_R_FORMAT:
+                lang_el = _w_sub(rPr_el, "lang")
+                for k, v in NORMAL_R_FORMAT["lang"].items():
+                    if v:
+                        _set_w_attr(lang_el, k, v)
+            # размер шрифта
+            sz_val = NORMAL_R_FORMAT.get("font_size_half_points", 24)
+            sz = _w_sub(rPr_el, "sz")
+            _set_w_attr_int(sz, "val", sz_val)
+            szCs = _w_sub(rPr_el, "szCs")
+            _set_w_attr_int(szCs, "val", sz_val)
+            pPrDefault_el = _w_sub(docDefaults_el, "pPrDefault")
+            _w_sub(pPrDefault_el, "pPr")
 
-        # Добавляем rFonts из NORMAL_R_FORMAT
-        if "rFonts" in NORMAL_R_FORMAT:
-            rf = _w_sub(rPr, "rFonts")
-            for k, v in NORMAL_R_FORMAT["rFonts"].items():
-                if v:
-                    _set_w_attr(rf, k, v)
+        # --- latent_styles ---
+        if self.latent_styles:
+            latent_el = _w_sub(styles, "latentStyles")
+            ls = self.latent_styles
+            if "defaultLockedState" in ls:
+                _set_w_attr(latent_el, "defLockedState", "1" if ls["defaultLockedState"] else "0")
+            if "defaultSemiHiddenState" in ls:
+                _set_w_attr(latent_el, "defSemiHidden", "1" if ls["defaultSemiHiddenState"] else "0")
+            if "defaultUnhideWhenUsedState" in ls:
+                _set_w_attr(latent_el, "defUnhideWhenUsed", "1" if ls["defaultUnhideWhenUsedState"] else "0")
+            if "defaultQFormatState" in ls:
+                _set_w_attr(latent_el, "defQFormat", "1" if ls["defaultQFormatState"] else "0")
+            if "defaultUiPriority" in ls:
+                _set_w_attr_int(latent_el, "defUIPriority", ls["defaultUiPriority"])
 
-        # Добавляем lang
-        if "lang" in NORMAL_R_FORMAT:
-            lang = _w_sub(rPr, "lang")
-            for k, v in NORMAL_R_FORMAT["lang"].items():
-                if v:
-                    _set_w_attr(lang, k, v)
+            exceptions = ls.get("exceptions")
+            if isinstance(exceptions, dict):
+                for name, props in exceptions.items():
+                    lsd = _w_sub(latent_el, "lsdException")
+                    _set_w_attr(lsd, "name", name)
+                    if "locked" in props:
+                        _set_w_attr(lsd, "locked", "1" if props["locked"] else "0")
+                    if "semiHidden" in props:
+                        _set_w_attr(lsd, "semiHidden", "1" if props["semiHidden"] else "0")
+                    if "unhideWhenUsed" in props:
+                        _set_w_attr(lsd, "unhideWhenUsed", "1" if props["unhideWhenUsed"] else "0")
+                    if "qFormat" in props:
+                        _set_w_attr(lsd, "qFormat", "1" if props["qFormat"] else "0")
+                    if "uiPriority" in props:
+                        _set_w_attr_int(lsd, "uiPriority", props["uiPriority"])
 
-        # Добавляем размер шрифта (обязательно!)
-        sz_val = NORMAL_R_FORMAT.get("font_size_half_points", 24)
-        sz = _w_sub(rPr, "sz")
-        _set_w_attr_int(sz, "val", sz_val)
-        szCs = _w_sub(rPr, "szCs")
-        _set_w_attr_int(szCs, "val", sz_val)
-
-        # Можно добавить и другие атрибуты, если они есть в NORMAL_R_FORMAT,
-        # например bold, italic и т.д., но обычно в docDefaults их не кладут.
-        # Оставляем как есть.
-
-        pPrDefault = _w_sub(docDefaults, "pPrDefault")
-        _w_sub(pPrDefault, "pPr")  # pPr пока пустой, можно не заполнять
-
-        # --- Normal style (paragraph, default) ---
-        normal_style = _w_sub(styles, "style", attrib={
-            f"{{{W_NS}}}type": "paragraph",
-            f"{{{W_NS}}}default": "1",
-            f"{{{W_NS}}}styleId": "Normal"
-        })
-        name = _w_sub(normal_style, "name")
-        _set_w_attr(name, "val", "Обычный")
-        # Build pPr from NORMAL_P_FORMAT
-        pPr_norm = self._build_pPr(NORMAL_P_FORMAT)
-        if pPr_norm is not None:
-            normal_style.append(pPr_norm)
-        rPr_norm = self._build_rPr(NORMAL_R_FORMAT)
-        if rPr_norm is not None:
-            normal_style.append(rPr_norm)
-
-        # --- Other paragraph styles (basedOn Normal) ---
+        # --- Все стили из self.styles ---
         for sid, st in self.styles.items():
-            # Skip if this is the default style? No, we still create it, but it will have basedOn Normal.
+            st_type = st.get("type")
+            if st_type not in ("paragraph", "character", "table", "numbering"):
+                continue
+
             word_id = st.get("word_style_id", sid)
-            p_diff = _normalize_p_format(st.get("p_format", {}))
-            r_diff = _normalize_r_format(st.get("r_format", {}))
+            # Базовые атрибуты
+            attrib = {
+                f"{{{W_NS}}}type": st_type,
+                f"{{{W_NS}}}styleId": word_id,
+            }
+            if st.get("is_default"):
+                attrib[f"{{{W_NS}}}default"] = "1"
 
-            style_el = _w_sub(styles, "style", attrib={
-                f"{{{W_NS}}}type": "paragraph",
-                f"{{{W_NS}}}styleId": word_id
-            })
+            style_el = _w_sub(styles, "style", attrib=attrib)
+
+            # name
+            name_val = st.get("name")
+            if not isinstance(name_val, str) or not name_val:
+                name_val = sid
             name_el = _w_sub(style_el, "name")
-            _set_w_attr(name_el, "val", st.get("title", sid))
+            _set_w_attr(name_el, "val", name_val)
 
-            based_on = _w_sub(style_el, "basedOn")
-            _set_w_attr(based_on, "val", "Normal")
+            # basedOn
+            based_on = st.get("based_on")
+            if based_on:
+                based_el = _w_sub(style_el, "basedOn")
+                _set_w_attr(based_el, "val", based_on)
 
-            # Build pPr from diff (only properties present in diff)
-            pPr = self._build_pPr(p_diff)
-            if pPr is not None:
-                style_el.append(pPr)
-            rPr = self._build_rPr(r_diff)
-            if rPr is not None:
-                style_el.append(rPr)
+            # link (для linked styles)
+            link = st.get("link")
+            if link:
+                link_el = _w_sub(style_el, "link")
+                _set_w_attr(link_el, "val", link)
 
-        # --- Character styles ---
-        for cid, st in self.char_styles.items():
-            word_id = st.get("word_style_id", cid)
-            r_abs = _normalize_r_format(st.get("r_format", {}))
+            # ui_priority
+            ui_priority = st.get("ui_priority")
+            if ui_priority is not None:
+                _set_w_attr_int(style_el, "uiPriority", ui_priority)
 
-            style_el = _w_sub(styles, "style", attrib={
-                f"{{{W_NS}}}type": "character",
-                f"{{{W_NS}}}styleId": word_id
-            })
-            name_el = _w_sub(style_el, "name")
-            _set_w_attr(name_el, "val", st.get("title", cid))
+            # q_format
+            if st.get("q_format"):
+                _w_sub(style_el, "qFormat")
 
-            # Character styles do not inherit from Normal (they are standalone)
-            rPr = self._build_rPr(r_abs)
-            if rPr is not None:
-                style_el.append(rPr)
+            # p_format (только для paragraph)
+            if st_type == "paragraph":
+                p_format = st.get("p_format", {})
+                if p_format:
+                    norm_p = _normalize_p_format(p_format)
+                    pPr_el = self._build_pPr(norm_p)
+                    if pPr_el is not None:
+                        style_el.append(pPr_el)
+
+                # Если стиль связан с нумерацией через pStyle в numbering.xml, но не имеет явного list_info,
+                # добавляем numPr в pPr стиля.
+                if sid in self.style_to_num:
+                    # Проверяем, есть ли уже list_info в p_format (явная нумерация)
+                    has_explicit_num = bool(p_format.get("list_info"))
+                    if not has_explicit_num:
+                        numId, ilvl = self.style_to_num[sid]
+                        # Ищем существующий pPr_el или создаём новый
+                        existing_pPr = None
+                        for child in style_el:
+                            if child.tag == qn_w("pPr"):
+                                existing_pPr = child
+                                break
+                        if existing_pPr is None:
+                            existing_pPr = _w_sub(style_el, "pPr")
+                        # Добавляем numPr
+                        numPr = _w_sub(existing_pPr, "numPr")
+                        ilvl_el = _w_sub(numPr, "ilvl")
+                        _set_w_attr(ilvl_el, "val", ilvl)
+                        numId_el = _w_sub(numPr, "numId")
+                        _set_w_attr(numId_el, "val", numId)
+
+            # r_format для paragraph и character
+            r_format = st.get("r_format", {})
+            if r_format:
+                rPr_el = self._build_rPr(_normalize_r_format(r_format))
+                if rPr_el is not None:
+                    style_el.append(rPr_el)
+
+            # При необходимости можно добавить обработку других полей (next, ui_priority и т.д.)
+
+        # Не создаём отдельно стиль Normal – он уже будет обработан, если присутствует в self.styles.
 
         return styles
+
+
 
     # =========================
     # BUILD: numbering.xml

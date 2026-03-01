@@ -229,6 +229,8 @@ class UltimateParserV43:
         numbering_definitions = self._parse_numbering_definitions()
         self._implied_numpr_by_word_style = self._build_implied_numpr_by_word_style(numbering_definitions)
 
+        default_style_id = self._get_default_word_paragraph_style_id()
+
         result: Dict[str, Any] = {
             "meta": {
                 "schema_version": "2.12",
@@ -248,6 +250,9 @@ class UltimateParserV43:
             "styles": self._parse_styles_v212(),
             "content": []
         }
+
+        if isinstance(default_style_id, str) and default_style_id:
+            result["meta"]["default_style_id"] = default_style_id
 
         body = self.document_xml.find(qn("w:body"))
         paragraphs_count = 0

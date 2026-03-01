@@ -24,6 +24,160 @@
         "distribute"
       ]
     },
+    "shapeExtent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cx": {
+          "type": "integer",
+          "description": "Ширина фигуры в EMU"
+        },
+        "cy": {
+          "type": "integer",
+          "description": "Высота фигуры в EMU"
+        }
+      },
+      "required": ["cx", "cy"]
+    },
+    "shapeTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rotation": {
+          "type": "integer",
+          "description": "Угол поворота в 60-тысячных долях градуса (90° = 5 400 000)"
+        },
+        "flipH": {
+          "type": "boolean",
+          "description": "Отразить по горизонтали"
+        },
+        "flipV": {
+          "type": "boolean",
+          "description": "Отразить по вертикали"
+        }
+      }
+    },
+    "shapeFill": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "string",
+          "description": "Цвет заливки в формате RGB (например, 'FF0000')"
+        },
+        "alpha": {
+          "type": "integer",
+          "description": "Прозрачность (0–100000)"
+        }
+      }
+    },
+    "shapeOutline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "integer",
+          "description": "Толщина линии в EMU (1 pt = 12 700 EMU)"
+        },
+        "color": {
+          "type": "string",
+          "description": "Цвет линии"
+        },
+        "alpha": {
+          "type": "integer",
+          "description": "Прозрачность линии"
+        },
+        "dashStyle": {
+          "type": "string",
+          "enum": ["solid", "dash", "dot", "dashDot", "dashDotDot"],
+          "description": "Стиль пунктира"
+        }
+      }
+    },
+    "shapeText": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/run" },
+          "description": "Массив run'ов внутри фигуры (аналогично содержимому абзаца)"
+        },
+        "margins": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "left": { "type": "integer" },
+            "right": { "type": "integer" },
+            "top": { "type": "integer" },
+            "bottom": { "type": "integer" }
+          }
+        },
+        "verticalAnchor": {
+          "type": "string",
+          "enum": ["top", "middle", "bottom"],
+          "description": "Вертикальное выравнивание текста внутри фигуры"
+        }
+      }
+    },
+    "shapePositioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relativeFrom": {
+          "type": "string",
+          "enum": ["page", "column", "character", "margin"],
+          "description": "Относительно чего позиционируется фигура"
+        },
+        "horizontalPos": {
+          "type": "integer",
+          "description": "Горизонтальное смещение в EMU"
+        },
+        "verticalPos": {
+          "type": "integer",
+          "description": "Вертикальное смещение в EMU"
+        },
+        "allowOverlap": {
+          "type": "boolean",
+          "description": "Разрешить перекрытие"
+        }
+      }
+    },
+    "shapeProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shapeType": {
+          "type": "string",
+          "description": "Тип фигуры (предопределённое имя, например 'rect', 'ellipse', 'line', 'roundRect')"
+        },
+        "extent": {
+          "$ref": "#/$defs/shapeExtent",
+          "description": "Размеры фигуры в EMU"
+        },
+        "transform": {
+          "$ref": "#/$defs/shapeTransform",
+          "description": "Преобразования (поворот, отражение)"
+        },
+        "fill": {
+          "$ref": "#/$defs/shapeFill",
+          "description": "Заливка фигуры"
+        },
+        "outline": {
+          "$ref": "#/$defs/shapeOutline",
+          "description": "Обводка фигуры"
+        },
+        "text": {
+          "$ref": "#/$defs/shapeText",
+          "description": "Текстовое содержимое фигуры"
+        },
+        "positioning": {
+          "$ref": "#/$defs/shapePositioning",
+          "description": "Позиционирование (для плавающих фигур)"
+        }
+      },
+      "required": ["shapeType", "extent"]
+    },
     "breakTypeEnum": {
       "type": "string",
       "enum": [
@@ -246,7 +400,8 @@
             "cr",
             "softHyphen",
             "noBreakHyphen",
-            "picture"
+            "picture",
+            "shape"
           ]
         },
         "id": {
@@ -308,6 +463,10 @@
         "description": {
           "type": "string",
           "description": "Альтернативный текст изображения (alt)"
+        },
+        "shape": {
+          "$ref": "#/$defs/shapeProperties",
+          "description": "Свойства фигуры (только если type='shape')"
         }
       },
       "allOf": [
@@ -350,6 +509,20 @@
           "then": {
             "required": [
               "file"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "shape"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "shape"
             ]
           }
         }
