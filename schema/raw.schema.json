@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://translatefactory/schema/raw/2.12",
-  "title": "Standard RAW JSON Schema v2.12 (Word styles imported + run overrides + tables)",
+  "$id": "https://translatefactory/schema/raw/2.13",
+  "title": "Standard RAW JSON Schema v2.13 (Word styles imported + run overrides + tables)",
   "version": "2.12",
   "type": "object",
   "required": [
@@ -563,7 +563,8 @@
       "required": [
         "type",
         "p_style_id",
-        "runs"
+        "runs",
+        "id"
       ],
       "properties": {
         "type": {

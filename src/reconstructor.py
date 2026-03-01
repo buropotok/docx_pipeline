@@ -333,7 +333,7 @@ class UltimateReconstructorV12:
 
         # Определяем пути к донорским файлам
         run_dir = os.path.dirname(os.path.dirname(self.raw_json_path))
-        donor_raw_dir = os.path.join(run_dir, "raw", "donor")
+        donor_raw_dir = os.path.join(run_dir, "raw", "materialized")
         self.donor_raw_dir = donor_raw_dir
         self.donor_media_path = os.path.join(donor_raw_dir, "word", "media")
 

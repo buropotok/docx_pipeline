@@ -1,7 +1,7 @@
 # UltimateParserV43.py
-# Schema v2.12 parser: imports styles.xml into JSON styles library; uses p_style_id/r_style_id + inline r_format; numbering + pictures preserved; legacy synthetic styles removed.
+# Schema v2.13 parser: imports styles.xml into JSON styles library; uses p_style_id/r_style_id + inline r_format; numbering + pictures preserved; legacy synthetic styles removed.
 # Parser Version: v43
-# Schema Version: 2.12
+# Schema Version: 2.13
 # Rules Version: 0.3
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -146,6 +146,7 @@ class UltimateParserV43:
 
         # Счётчик для run_id
         self._run_counter = 1
+        self._paragraph_counter = 1
         self.default_paragraph_style_id: Optional[str] = None
 
         self._init_word_styles()
@@ -233,7 +234,7 @@ class UltimateParserV43:
 
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.12",
+                "schema_version": "2.13",
                 "rules_version": "0.3",
                 "producer": {
                     "name": "UltimateParserV43",
@@ -265,10 +266,14 @@ class UltimateParserV43:
                 p_style_id = self._get_inline_p_style_id(pPr)
 
                 item: Dict[str, Any] = {
+                    "type": "paragraph",
+                    "id": f"p_{self._paragraph_counter}",
                     "p_style_id": p_style_id,
                     "runs": self._parse_runs(p)
                 }
                 runs_count += len(item["runs"])
+
+                self._paragraph_counter += 1
 
                 p_inline = self._to_schema_p_format(self._parse_pPr(pPr, include_indent_origin=False))
                 if p_inline:
