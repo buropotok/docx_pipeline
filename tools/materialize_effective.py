@@ -29,15 +29,15 @@ def _extract_line_info(line_rule: Any, line_spacing: Any) -> Dict[str, Any]:
         return out
 
     if rule == WD_LINE_SPACE_SINGLE:
-        out["lineRule"] = "AUTO"
-        out["lineTwip"] = 240
+        out["line_rule"] = "auto"
+        out["line_spacing_twip"] = 240
         return out
 
     if rule in (WD_LINE_SPACE_1PT5, WD_LINE_SPACE_DOUBLE):
         try:
             multiple = float(line_spacing) / 12.0
-            out["lineRule"] = "AUTO"
-            out["lineTwip"] = round(240 * multiple)
+            out["line_rule"] = "auto"
+            out["line_spacing_twip"] = round(240 * multiple)
         except Exception:
             pass
         return out
@@ -45,8 +45,8 @@ def _extract_line_info(line_rule: Any, line_spacing: Any) -> Dict[str, Any]:
     if rule == WD_LINE_SPACE_MULTIPLE:
         try:
             multiple = float(line_spacing) / 12.0
-            out["lineRule"] = "AUTO"
-            out["lineTwip"] = round(240 * multiple)
+            out["line_rule"] = "auto"
+            out["line_spacing_twip"] = round(240 * multiple)
         except Exception:
             pass
         return out
@@ -54,15 +54,15 @@ def _extract_line_info(line_rule: Any, line_spacing: Any) -> Dict[str, Any]:
     if rule == WD_LINE_SPACE_EXACTLY:
         tw = _points_to_twips(line_spacing)
         if tw is not None:
-            out["lineRule"] = "EXACT"
-            out["lineTwip"] = tw
+            out["line_rule"] = "exact"
+            out["line_spacing_twip"] = tw
         return out
 
     if rule == WD_LINE_SPACE_AT_LEAST:
         tw = _points_to_twips(line_spacing)
         if tw is not None:
-            out["lineRule"] = "AT_LEAST"
-            out["lineTwip"] = tw
+            out["line_rule"] = "atLeast"
+            out["line_spacing_twip"] = tw
         return out
 
     return out
@@ -147,7 +147,7 @@ def main() -> int:
             sb = pf.SpaceBefore
             tw = _points_to_twips(sb)
             if tw is not None:
-                extracted["spaceBeforeTwip"] = tw
+                extracted["space_before_twip"] = tw
             print(f"[effective] SpaceBefore={sb}pt -> {tw}")
         except Exception as exc:
             print(f"[effective] SpaceBefore unavailable: {exc}")
@@ -156,7 +156,7 @@ def main() -> int:
             sa = pf.SpaceAfter
             tw = _points_to_twips(sa)
             if tw is not None:
-                extracted["spaceAfterTwip"] = tw
+                extracted["space_after_twip"] = tw
             print(f"[effective] SpaceAfter={sa}pt -> {tw}")
         except Exception as exc:
             print(f"[effective] SpaceAfter unavailable: {exc}")
@@ -200,7 +200,7 @@ def main() -> int:
                 print(f"[effective] quit warning: {exc}")
 
     p_format = styles[default_style_id].setdefault("p_format", {})
-    target_fields = ["spaceBeforeTwip", "spaceAfterTwip", "lineTwip", "lineRule"]
+    target_fields = ["space_before_twip", "space_after_twip", "line_spacing_twip", "line_rule"]
     missing_before = sorted([k for k in target_fields if k not in p_format])
     skipped_existing = sorted([k for k in target_fields if k in p_format])
     filled_fields = []

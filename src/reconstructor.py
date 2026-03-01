@@ -130,6 +130,62 @@ def _merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _normalize_p_format(p_format: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(p_format, dict):
+        return {}
+    out = dict(p_format)
+    key_map = {
+        "line_spacing_twip": "lineTwip",
+        "line_rule": "lineRule",
+        "space_before_twip": "spaceBeforeTwip",
+        "space_after_twip": "spaceAfterTwip",
+        "indent_start_twip": "indentStartTwip",
+        "indent_end_twip": "indentEndTwip",
+        "indent_first_line_twip": "indentFirstLineTwip",
+        "indent_hanging_twip": "indentHangingTwip",
+        "keep_next": "keepNext",
+        "keep_lines": "keepLines",
+        "page_break_before": "pageBreakBefore",
+        "widow_control": "widowControl",
+        "text_alignment": "textAlignment",
+        "list_info": "numbering",
+    }
+    line_rule_map = {"auto": "AUTO", "exact": "EXACT", "atLeast": "AT_LEAST"}
+    text_alignment_map = {
+        "auto": "AUTO",
+        "baseline": "BASELINE",
+        "top": "TOP",
+        "center": "CENTER",
+        "bottom": "BOTTOM",
+    }
+    for src, dst in key_map.items():
+        if src in p_format and dst not in out:
+            out[dst] = p_format[src]
+    lr = out.get("lineRule")
+    if isinstance(lr, str):
+        out["lineRule"] = line_rule_map.get(lr, lr)
+    ta = out.get("textAlignment")
+    if isinstance(ta, str):
+        out["textAlignment"] = text_alignment_map.get(ta, ta)
+    return out
+
+
+def _normalize_r_format(r_format: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(r_format, dict):
+        return {}
+    out = dict(r_format)
+    key_map = {
+        "vert_align": "vertical_align",
+        "caps": "all_caps",
+        "spacing_twip": "charSpacingTwip",
+        "position_half_points": "positionHalfPoints",
+    }
+    for src, dst in key_map.items():
+        if src in r_format and dst not in out:
+            out[dst] = r_format[src]
+    return out
+
+
 class UltimateReconstructorV12:
     def __init__(self, raw_json_path: str):
         self.raw_json_path = raw_json_path
@@ -268,7 +324,7 @@ class UltimateReconstructorV12:
 
         for p_item in self.content:
             p = _w_sub(body, "p")
-            style_id = p_item.get("style_id")
+            style_id = p_item.get("p_style_id") or p_item.get("style_id")
             runs = p_item.get("runs", [])
 
             # Создаём pPr и добавляем ссылку на стиль
@@ -279,7 +335,7 @@ class UltimateReconstructorV12:
                 _set_w_attr(pStyle, "val", word_id)
 
             # --- ДОБАВЛЯЕМ ЛОКАЛЬНЫЕ СВОЙСТВА АБЗАЦА ---
-            local_p_format = p_item.get("p_format")
+            local_p_format = _normalize_p_format(p_item.get("p_format"))
             if local_p_format:
                 local_pPr = self._build_pPr(local_p_format)
                 if local_pPr is not None:
@@ -296,13 +352,19 @@ class UltimateReconstructorV12:
                 print(f"[recon] processing run id={run.get('id')}, type={rtype}")
                 if rtype == "picture":
                     print(f"[recon] FOUND PICTURE: {run}")
-                # Run properties: if char_style_id present, add rStyle
-                char_style_id = run.get("char_style_id")
-                if char_style_id:
+                # Run properties: schema v2.12 uses r_style_id (+ deprecated char_style_id fallback)
+                run_style_id = run.get("r_style_id") or run.get("char_style_id")
+                run_local_r = _normalize_r_format(run.get("r_format"))
+                if run_style_id or run_local_r:
                     rPr_el = _w_sub(r, "rPr")
-                    rStyle = _w_sub(rPr_el, "rStyle")
-                    word_id = self.style_id_to_word.get(char_style_id, char_style_id)
-                    _set_w_attr(rStyle, "val", word_id)
+                    if run_style_id:
+                        rStyle = _w_sub(rPr_el, "rStyle")
+                        word_id = self.style_id_to_word.get(run_style_id, run_style_id)
+                        _set_w_attr(rStyle, "val", word_id)
+                    local_rPr = self._build_rPr(run_local_r)
+                    if local_rPr is not None:
+                        for child in local_rPr:
+                            rPr_el.append(child)
 
                 # Content
                 if rtype == "text":
@@ -337,11 +399,11 @@ class UltimateReconstructorV12:
                         continue
                     r_pic = _w_sub(p, "r")
                     # Если есть char_style_id, добавим rStyle
-                    char_style_id = run.get("char_style_id")
-                    if char_style_id:
+                    run_style_id = run.get("r_style_id") or run.get("char_style_id")
+                    if run_style_id:
                         rPr_el = _w_sub(r_pic, "rPr")
                         rStyle = _w_sub(rPr_el, "rStyle")
-                        word_id = self.style_id_to_word.get(char_style_id, char_style_id)
+                        word_id = self.style_id_to_word.get(run_style_id, run_style_id)
                         _set_w_attr(rStyle, "val", word_id)
 
                     # Вызываем функцию для добавления drawing
@@ -537,9 +599,12 @@ class UltimateReconstructorV12:
                 caps = _w_sub(rPr, "caps")
                 _set_w_attr(caps, "val", "0")
 
-        # lang
+        # lang (schema v2.12: string; keep dict backward-compat)
         lang = r_format.get("lang")
-        if isinstance(lang, dict) and lang:
+        if isinstance(lang, str) and lang:
+            le = _w_sub(rPr, "lang")
+            _set_w_attr(le, "val", lang)
+        elif isinstance(lang, dict) and lang:
             le = _w_sub(rPr, "lang")
             for k, v in lang.items():
                 if v is not None:
@@ -704,8 +769,8 @@ class UltimateReconstructorV12:
         for sid, st in self.styles.items():
             # Skip if this is the default style? No, we still create it, but it will have basedOn Normal.
             word_id = st.get("word_style_id", sid)
-            p_diff = st.get("p_format", {})
-            r_diff = st.get("r_format", {})
+            p_diff = _normalize_p_format(st.get("p_format", {}))
+            r_diff = _normalize_r_format(st.get("r_format", {}))
 
             style_el = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "paragraph",
@@ -728,7 +793,7 @@ class UltimateReconstructorV12:
         # --- Character styles ---
         for cid, st in self.char_styles.items():
             word_id = st.get("word_style_id", cid)
-            r_abs = st.get("r_format", {})
+            r_abs = _normalize_r_format(st.get("r_format", {}))
 
             style_el = _w_sub(styles, "style", attrib={
                 f"{{{W_NS}}}type": "character",
