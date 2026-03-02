@@ -1,9 +1,9 @@
 # UltimateReconstructorV12.py
 # Reconstructor Version: v12
-# Schema Version: 2.12
+# Schema Version: 2.13
 # Rules Version: 0.3
 
-# RAW JSON -> DOCX reconstructor using lxml (NO python-docx)
+# RAW JSON (v2.13) -> DOCX reconstructor using lxml (NO python-docx)
 # Target: visually deterministic for "forms" subset (no tables/images/fields/hyperlinks)
 #
 # ГИБРИДНЫЙ ПОДХОД:
@@ -391,23 +391,92 @@ class UltimateReconstructorV12:
         if body is None:
             raise ValueError("Document has no body element")
 
-        # Сохраняем все элементы, которые не являются абзацами (sectPr и т.д.)
-        non_paragraphs = []
-        for child in body:
-            if child.tag != qn_w("p"):
-                non_paragraphs.append(child)
+        # Индексируем оригинальные дочерние элементы
+        orig_children = list(body)
+        paragraph_counter = 1
+        orig_paragraphs_by_id: Dict[str, etree._Element] = {}
+        paragraph_index_by_id: Dict[str, int] = {}
+        non_paragraphs: List[etree._Element] = []
+        non_paragraph_indices: List[int] = []
 
-        # Очищаем body
+        for idx, elem in enumerate(orig_children):
+            if elem.tag == qn_w("p"):
+                pid = f"p_{paragraph_counter}"
+                orig_paragraphs_by_id[pid] = elem
+                paragraph_index_by_id[pid] = idx
+                paragraph_counter += 1
+            else:
+                non_paragraphs.append(elem)
+                non_paragraph_indices.append(idx)
+
+        # Модифицируем существующие абзацы (id без точки)
+        modified_paragraphs: Dict[str, etree._Element] = {}
+        for p_item in content:
+            pid = p_item.get("id")
+            if not pid:
+                raise ValueError(f"Paragraph missing 'id' field: {p_item}")
+            if '.' not in pid:
+                orig_p = orig_paragraphs_by_id.get(pid)
+                if orig_p is None:
+                    raise ValueError(f"Original paragraph with id {pid} not found")
+                self._modify_paragraph(orig_p, p_item)
+                modified_paragraphs[pid] = orig_p
+
+        # Собираем новые абзацы (id с точкой)
+        new_paragraphs: List[Tuple[str, etree._Element]] = []  # (base_id, element)
+        for p_item in content:
+            pid = p_item.get("id")
+            if '.' in pid:
+                base_id = pid.split('.')[0]  # например, "p_1"
+                new_p = self._build_paragraph(p_item)
+                new_paragraphs.append((base_id, new_p))
+
+        # Строим итоговый список children, сохраняя порядок
+        final_children: List[etree._Element] = []
+        # Проходим по оригинальным элементам в порядке
+        for idx, elem in enumerate(orig_children):
+            if idx in non_paragraph_indices:
+                final_children.append(elem)  # не-абзацный элемент
+            else:
+                # Это абзац, находим его id
+                # (можно было бы сохранить pid при первом проходе, но проще вычислить заново)
+                # Для простоты будем использовать словарь paragraph_index_by_id, обратный индекс
+                # Но нам нужен pid по индексу. Создадим mapping index -> pid
+                pass
+
+        # Упрощённый подход: сначала скопируем все оригинальные элементы,
+        # затем заменим абзацы на модифицированные, а потом вставим новые.
+        final_children = list(orig_children)  # копия
+
+        # Заменяем существующие абзацы на модифицированные
+        for pid, mod_p in modified_paragraphs.items():
+            idx = paragraph_index_by_id[pid]
+            final_children[idx] = mod_p
+
+        # Вставляем новые абзацы после базовых
+        # Группируем по base_id и сортируем по суффиксу (для стабильности)
+        from collections import defaultdict
+        new_by_base = defaultdict(list)
+        for base_id, new_p in new_paragraphs:
+            new_by_base[base_id].append(new_p)
+        for base_id, new_list in new_by_base.items():
+            # Определяем индекс вставки: после базового абзаца
+            if base_id in paragraph_index_by_id:
+                base_idx = paragraph_index_by_id[base_id]
+            else:
+                # Если базового нет (например, p_0), вставляем в начало
+                base_idx = -1
+            # Вставляем после base_idx, сдвигая индексы
+            insert_pos = base_idx + 1
+            for new_p in new_list:
+                final_children.insert(insert_pos, new_p)
+                insert_pos += 1
+                # Сдвигаем индексы всех последующих элементов (не требуется, если не используем индексы далее)
+
+        # Очищаем body и добавляем новые children
         for child in list(body):
             body.remove(child)
-
-        # Создаём новые абзацы из JSON
-        for p_item in content:
-            p = self._build_paragraph(p_item)
-            body.append(p)
-
-        # Добавляем обратно сохранённые элементы (sectPr и др.)
-        for elem in non_paragraphs:
+        for elem in final_children:
             body.append(elem)
 
     def _build_paragraph(self, p_item: Dict[str, Any]) -> etree._Element:
@@ -528,6 +597,113 @@ class UltimateReconstructorV12:
         else:
             # unsupported run types (softHyphen, noBreakHyphen) – ignore
             return None
+
+    def _remove_child_if_exists(self, parent: etree._Element, tag_local: str) -> None:
+        child = parent.find(qn_w(tag_local))
+        if child is not None:
+            parent.remove(child)
+
+    def _modify_paragraph(self, orig_p: etree._Element, json_p: Dict[str, Any]) -> None:
+        """
+        Модифицирует существующий абзац: обновляет pPr согласно json_p["p_format"]
+        и заменяет все run'ы на новые из json_p["runs"].
+        """
+        # Обновляем pPr
+        pPr = orig_p.find(qn_w("pPr"))
+        if pPr is None:
+            pPr = etree.SubElement(orig_p, qn_w("pPr"))
+        p_format = json_p.get("p_format", {})
+        self._update_pPr(pPr, p_format)
+
+        # Удаляем все старые run'ы (кроме pPr)
+        for child in list(orig_p):
+            if child.tag != qn_w("pPr"):
+                orig_p.remove(child)
+
+        # Добавляем новые run'ы из JSON
+        for run_data in json_p.get("runs", []):
+            new_run = self._build_run(run_data)
+            if new_run is not None:
+                orig_p.append(new_run)
+
+    def _update_pPr(self, pPr: etree._Element, p_format: Dict[str, Any]) -> None:
+        """
+        Обновляет элемент <w:pPr> на основе словаря p_format.
+        Для каждого поддерживаемого свойства удаляет старый соответствующий элемент
+        и добавляет новый, построенный из значения в p_format.
+        """
+        # Alignment
+        if "alignment" in p_format:
+            self._remove_child_if_exists(pPr, "jc")
+            align_val = p_format["alignment"]
+            # Преобразуем "justify" в "both" (как в _build_pPr)
+            if align_val == "justify":
+                xml_val = "both"
+            else:
+                xml_val = align_val
+            jc = etree.SubElement(pPr, qn_w("jc"))
+            _set_w_attr(jc, "val", xml_val)
+
+        # Indents
+        if any(k in p_format for k in ("indent_start_twip", "indent_end_twip",
+                                        "indent_first_line_twip", "indent_hanging_twip")):
+            self._remove_child_if_exists(pPr, "ind")
+            ind = etree.SubElement(pPr, qn_w("ind"))
+            if "indent_start_twip" in p_format:
+                _set_w_attr_int(ind, "left", p_format["indent_start_twip"])
+            if "indent_end_twip" in p_format:
+                _set_w_attr_int(ind, "right", p_format["indent_end_twip"])
+            if "indent_first_line_twip" in p_format:
+                _set_w_attr_int(ind, "firstLine", p_format["indent_first_line_twip"])
+            if "indent_hanging_twip" in p_format:
+                _set_w_attr_int(ind, "hanging", p_format["indent_hanging_twip"])
+
+        # Spacing
+        if any(k in p_format for k in ("space_before_twip", "space_after_twip",
+                                        "space_before_lines", "space_after_lines",
+                                        "before_autospacing", "after_autospacing",
+                                        "line_spacing_twip", "line_rule")):
+            self._remove_child_if_exists(pPr, "spacing")
+            sp = etree.SubElement(pPr, qn_w("spacing"))
+            if "space_before_twip" in p_format:
+                _set_w_attr_int(sp, "before", p_format["space_before_twip"])
+            if "space_after_twip" in p_format:
+                _set_w_attr_int(sp, "after", p_format["space_after_twip"])
+            if "space_before_lines" in p_format:
+                _set_w_attr_int(sp, "beforeLines", p_format["space_before_lines"])
+            if "space_after_lines" in p_format:
+                _set_w_attr_int(sp, "afterLines", p_format["space_after_lines"])
+            if "before_autospacing" in p_format:
+                _set_w_attr(sp, "beforeAutospacing", "1" if p_format["before_autospacing"] else "0")
+            if "after_autospacing" in p_format:
+                _set_w_attr(sp, "afterAutospacing", "1" if p_format["after_autospacing"] else "0")
+            if "line_spacing_twip" in p_format:
+                _set_w_attr_int(sp, "line", p_format["line_spacing_twip"])
+            lr = p_format.get("line_rule")
+            if lr:
+                if lr == "auto":
+                    _set_w_attr(sp, "lineRule", "auto")
+                elif lr == "atLeast":
+                    _set_w_attr(sp, "lineRule", "atLeast")
+                elif lr == "exact":
+                    _set_w_attr(sp, "lineRule", "exact")
+
+        # Tabs (более сложно, можно пока пропустить или реализовать аналогично)
+        if "tabs" in p_format:
+            self._remove_child_if_exists(pPr, "tabs")
+            tabs = p_format["tabs"]
+            if isinstance(tabs, list) and tabs:
+                tabs_el = etree.SubElement(pPr, qn_w("tabs"))
+                for t in tabs:
+                    if not isinstance(t, dict):
+                        continue
+                    pos = _safe_int(t.get("posTwip"))
+                    val = t.get("val")
+                    if pos is None or val is None:
+                        continue
+                    tab_el = etree.SubElement(tabs_el, qn_w("tab"))
+                    _set_w_attr(tab_el, "pos", pos)
+                    _set_w_attr(tab_el, "val", val)
 
     # =========================
     # BUILD: pPr from p_format diff
