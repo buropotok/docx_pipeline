@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://translatefactory/schema/raw/2.13",
-  "title": "Standard RAW JSON Schema v2.13 (Word styles imported + run overrides + tables)",
-  "version": "2.12",
+  "$id": "https://translatefactory/schema/raw/2.15",
+  "title": "Standard RAW JSON Schema v2.15 (Word styles imported + run overrides + tables with full properties)",
+  "version": "2.15",
   "type": "object",
   "required": [
     "meta",
@@ -41,6 +41,10 @@
         "atLeast"
       ]
     },
+    "positionEnum": {
+      "type": "string",
+      "enum": ["before", "after"]
+    },
     "numberingRef": {
       "type": "object",
       "additionalProperties": false,
@@ -68,6 +72,10 @@
         },
         "text_alignment": {
           "$ref": "#/$defs/textAlignmentEnum"
+        },
+        "contextual_spacing": {
+          "type": "boolean",
+          "description": "Контекстуальное пространство перед/после абзаца"
         },
         "line_spacing_twip": {
           "description": "Интервал между строками (w:spacing/@w:line) в твипах.",
@@ -126,6 +134,238 @@
         "list_info": {
           "description": "Привязка к нумерации (w:numPr).",
           "$ref": "#/$defs/numberingRef"
+        }
+      }
+    },
+    "border": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "type": "string",
+          "description": "Стиль линии: single, double, dotted, dashed, etc."
+        },
+        "sz": {
+          "type": "integer",
+          "description": "Толщина в 1/8 pt"
+        },
+        "color": {
+          "type": "string",
+          "description": "Цвет в формате RRGGBB или 'auto'"
+        },
+        "space": {
+          "type": "integer",
+          "description": "Отступ от текста в твипах (опционально)"
+        }
+      },
+      "required": ["val", "sz", "color"]
+    },
+    "tblBorders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": { "$ref": "#/$defs/border" },
+        "left": { "$ref": "#/$defs/border" },
+        "bottom": { "$ref": "#/$defs/border" },
+        "right": { "$ref": "#/$defs/border" },
+        "insideH": { "$ref": "#/$defs/border" },
+        "insideV": { "$ref": "#/$defs/border" }
+      }
+    },
+    "sizeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "type": "integer",
+          "description": "Значение ширины/высоты"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["dxa", "pct", "auto"],
+          "description": "Единица измерения: dxa (twips), pct (проценты), auto"
+        }
+      },
+      "required": ["w", "type"]
+    },
+    "tblCellMar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": { "$ref": "#/$defs/sizeType" },
+        "left": { "$ref": "#/$defs/sizeType" },
+        "bottom": { "$ref": "#/$defs/sizeType" },
+        "right": { "$ref": "#/$defs/sizeType" }
+      }
+    },
+    "shd": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "type": "string",
+          "description": "Стиль заливки: clear, solid, pct10, etc."
+        },
+        "color": {
+          "type": "string",
+          "description": "Цвет штриховки (например, 'auto')"
+        },
+        "fill": {
+          "type": "string",
+          "description": "Цвет фона в формате RRGGBB"
+        },
+        "themeColor": {
+          "type": "string",
+          "description": "Цвет темы (опционально)"
+        },
+        "themeTint": {
+          "type": "string",
+          "description": "Оттенок темы (опционально)"
+        },
+        "themeShade": {
+          "type": "string",
+          "description": "Тень темы (опционально)"
+        }
+      },
+      "required": ["val", "fill"]
+    },
+    "tblLook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "firstRow": { "type": "boolean", "description": "Применить форматирование первой строки" },
+        "lastRow": { "type": "boolean", "description": "Применить форматирование последней строки" },
+        "firstColumn": { "type": "boolean", "description": "Применить форматирование первого столбца" },
+        "lastColumn": { "type": "boolean", "description": "Применить форматирование последнего столбца" },
+        "bandRow": { "type": "boolean", "description": "Применить чередование строк" },
+        "bandCol": { "type": "boolean", "description": "Применить чередование столбцов" },
+        "noHBand": { "type": "boolean", "description": "Отключить чередование строк" },
+        "noVBand": { "type": "boolean", "description": "Отключить чередование столбцов" }
+      }
+    },
+    "tblOverlapEnum": {
+      "type": "string",
+      "enum": ["overlap", "never"]
+    },
+    "jcEnum": {
+      "type": "string",
+      "enum": ["left", "center", "right", "both", "distribute"]
+    },
+    "hRuleEnum": {
+      "type": "string",
+      "enum": ["auto", "exact", "atLeast"]
+    },
+    "vMergeEnum": {
+      "type": "string",
+      "enum": ["continue", "restart"]
+    },
+    "textDirectionEnum": {
+      "type": "string",
+      "enum": ["lr", "tb", "bt", "lrV", "tbV", "btV"]
+    },
+    "tblPr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tblStyle": { "type": "string", "description": "Идентификатор стиля таблицы (w:tblStyle/@w:val)" },
+        "tblpPr": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "leftFromText": { "type": "integer" },
+            "rightFromText": { "type": "integer" },
+            "topFromText": { "type": "integer" },
+            "bottomFromText": { "type": "integer" },
+            "vertAnchor": { "type": "string", "enum": ["page", "margin", "text"] },
+            "horzAnchor": { "type": "string", "enum": ["page", "margin", "text"] },
+            "tblpX": { "type": "integer" },
+            "tblpY": { "type": "integer" },
+            "tblpXSpec": { "type": "string", "enum": ["left", "center", "right", "inside", "outside"] },
+            "tblpYSpec": { "type": "string", "enum": ["top", "center", "bottom"] }
+          }
+        },
+        "tblOverlap": { "$ref": "#/$defs/tblOverlapEnum" },
+        "tblW": { "$ref": "#/$defs/sizeType" },
+        "jc": { "$ref": "#/$defs/jcEnum" },
+        "tblInd": { "$ref": "#/$defs/sizeType" },
+        "tblBorders": { "$ref": "#/$defs/tblBorders" },
+        "tblCellMar": { "$ref": "#/$defs/tblCellMar" },
+        "tblCellSpacing": { "$ref": "#/$defs/sizeType" },
+        "tblLayout": { "type": "string", "enum": ["autofit", "fixed"] },
+        "tblLook": { "$ref": "#/$defs/tblLook" },
+        "tblCaption": { "type": "string" },
+        "tblDescription": { "type": "string" }
+      }
+    },
+    "trPr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trHeight": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "val": { "type": "integer" },
+            "hRule": { "$ref": "#/$defs/hRuleEnum" }
+          },
+          "required": ["val", "hRule"]
+        },
+        "tblHeader": { "type": "boolean" },
+        "cantSplit": { "type": "boolean" },
+        "jc": { "$ref": "#/$defs/jcEnum" }
+      }
+    },
+    "tcPr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tcW": { "$ref": "#/$defs/sizeType" },
+        "gridSpan": { "type": "integer", "minimum": 1 },
+        "vMerge": { "$ref": "#/$defs/vMergeEnum" },
+        "tcBorders": { "$ref": "#/$defs/tblBorders" },
+        "shd": { "$ref": "#/$defs/shd" },
+        "tcMar": { "$ref": "#/$defs/tblCellMar" },
+        "vAlign": {
+          "type": "string",
+          "enum": ["top", "center", "bottom"]
+        },
+        "textDirection": { "$ref": "#/$defs/textDirectionEnum" },
+        "tcFitText": { "type": "boolean" },
+        "noWrap": { "type": "boolean" }
+      }
+    },
+    "tableRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "cells"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор строки (сквозной, сохраняется во всём пайплайне)"
+        },
+        "derive_from": { "type": "string" },
+        "trPr": { "$ref": "#/$defs/trPr", "description": "Локальные свойства строки (переопределения)" },
+        "cells": {
+          "type": "array",
+          "description": "Ячейки строки (порядок важен)",
+          "items": { "$ref": "#/$defs/tableCell" }
+        }
+      }
+    },
+    "tableCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Уникальный идентификатор ячейки (опционально)"
+        },
+        "tcPr": { "$ref": "#/$defs/tcPr", "description": "Локальные свойства ячейки (переопределения)" },
+        "content": {
+          "type": "array",
+          "description": "Содержимое ячейки (массив абзацев)",
+          "items": { "$ref": "#/$defs/paragraph" }
         }
       }
     },
@@ -260,6 +500,10 @@
         "break_type": {
           "$ref": "#/$defs/breakTypeEnum"
         },
+        "parent_id": {
+          "type": "string",
+          "description": "Идентификатор родительского абзаца для данного run (например, p_1)"
+        },
         "meta": {
           "type": "object",
           "additionalProperties": false,
@@ -316,6 +560,7 @@
         }
       },
       "allOf": [
+
         {
           "if": {
             "properties": {
@@ -575,6 +820,22 @@
           "type": "string",
           "description": "Уникальный идентификатор абзаца"
         },
+         "deleted": {
+          "type": "boolean",
+          "description": "Patch-op: если true, управляемый блок удаляется (удаляется SDT-wrapper)."
+        },
+        "anchor": {
+          "type": "string",
+          "description": "Patch-op: id якоря (управляемый блок), относительно которого позиционируется этот элемент."
+        },
+        "position": {
+          "$ref": "#/$defs/positionEnum",
+          "description": "Patch-op: before|after относительно anchor. Порядок вставок определяется порядком элементов в content."
+        },
+        "derive_from": {
+          "type": "string",
+          "description": "Patch-op: если элемента с таким id нет в XML, создать его как clone XML элемента derive_from, затем применить overrides."
+        },
         "p_style_id": {
           "type": "string",
           "description": "Paragraph styleId (w:pStyle/@w:val) — ключ в styles."
@@ -595,42 +856,6 @@
         }
       }
     },
-    "tableCell": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["content"],
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Уникальный идентификатор ячейки (опционально)"
-        },
-        "content": {
-          "type": "array",
-          "description": "Содержимое ячейки (массив абзацев)",
-          "items": {
-            "$ref": "#/$defs/paragraph"
-          }
-        }
-      }
-    },
-    "tableRow": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "cells"],
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Уникальный идентификатор строки (сквозной, сохраняется во всём пайплайне)"
-        },
-        "cells": {
-          "type": "array",
-          "description": "Ячейки строки (порядок важен)",
-          "items": {
-            "$ref": "#/$defs/tableCell"
-          }
-        }
-      }
-    },
     "table": {
       "type": "object",
       "additionalProperties": false,
@@ -644,16 +869,26 @@
           "type": "string",
           "description": "Уникальный идентификатор таблицы (сквозной, сохраняется во всём пайплайне)"
         },
+         "deleted": { "type": "boolean" },
+        "anchor": { "type": "string" },
+        "position": { "$ref": "#/$defs/positionEnum" },
+        "derive_from": { "type": "string" },
+        "tblPr": {
+          "$ref": "#/$defs/tblPr",
+          "description": "Локальные свойства таблицы (переопределения)"
+        },
+        "tbl_grid": {
+          "type": "array",
+          "description": "Ширина колонок в твипах (w:tblGrid/w:gridCol/@w:w)",
+          "items": { "type": "integer" }
+        },
         "tbl_style_id": {
           "type": "string",
           "description": "Идентификатор стиля таблицы (ключ в styles) — опционально, если не меняется"
         },
         "rows": {
           "type": "array",
-          "description": "Строки таблицы (порядок определяет итоговый документ)",
-          "items": {
-            "$ref": "#/$defs/tableRow"
-          }
+          "items": { "$ref": "#/$defs/tableRow" }
         }
       }
     },

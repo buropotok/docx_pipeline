@@ -39,8 +39,14 @@ def _to_emu(val: float, unit: str) -> int:
         return int(val * EMU_PER_IN)
     if u == "px":
         return int(val * EMU_PER_PX_96DPI)
-    # неизвестная единица — трактуем как pt (детерминированно)
-    return int(val * EMU_PER_PT)
+    if u == "cm":
+        return int(val * EMU_PER_IN / 2.54)
+    if u == "mm":
+        return int(val * EMU_PER_IN / 25.4)
+    if u == "pc":
+        return int(val * EMU_PER_PT * 12)  # 1pc = 12pt
+    # неизвестная единица — пропускаем (не синтезируем)
+    raise ValueError(f"Unsupported unit: {unit}")
 
 
 def _normalize_rels_target(target: str) -> str:

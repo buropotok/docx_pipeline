@@ -223,3 +223,91 @@ def reconstruct_docx(context: AssetExecutionContext, input_docx_path: str) -> Ou
         },
     )
 
+@asset
+def full_run_pipeline(context: AssetExecutionContext) -> Output[Nothing]:
+    """
+    One-step Dagster asset: runs saveas -> add_custom_attrs -> parser -> reconstructor
+    and writes artifacts into data/runs/<run_id>/... (same structure as before).
+    """
+    py = sys.executable
+
+    cmd = [
+        py,
+        "tools/full_run_utility.py",
+        "--run-id",
+        context.run_id,
+        # "--input-docx", str(DEFAULT_INPUT_DOCX),  # можно явно, но утилита и так берёт data/donor.docx по умолчанию
+    ]
+
+    context.log.info(f"[full_run_pipeline] cmd={' '.join(cmd)}")
+    proc = subprocess.run(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        text=True,
+        capture_output=True,
+    )
+    if proc.stdout:
+        for line in proc.stdout.splitlines():
+            context.log.info(f"[full_run_pipeline] stdout: {line}")
+    if proc.stderr:
+        for line in proc.stderr.splitlines():
+            context.log.warning(f"[full_run_pipeline] stderr: {line}")
+
+    context.log.info(f"[full_run_pipeline] exit_code={proc.returncode}")
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout, stderr=proc.stderr)
+
+    run_dir = RUNS_DIR / context.run_id
+    return Output(
+        value=None,
+        metadata={
+            "run_dir": MetadataValue.path(str(run_dir)),
+            "out_dir": MetadataValue.path(str(run_dir / "out")),
+            "raw_dir": MetadataValue.path(str(run_dir / "raw")),
+        },
+    )
+
+
+@asset
+def full_run_pipeline_gpt(context: AssetExecutionContext) -> Output[Nothing]:
+    """
+    One-step Dagster asset: runs saveas -> add_custom_attrs -> parser -> reconstructor
+    and writes artifacts into data/runs/<run_id>/... (same structure as before).
+    """
+    py = sys.executable
+
+    cmd = [
+        py,
+        "tools/full_run_utility_gpt.py",
+        "--run-id",
+        context.run_id,
+        # "--input-docx", str(DEFAULT_INPUT_DOCX),  # можно явно, но утилита и так берёт data/donor.docx по умолчанию
+    ]
+
+    context.log.info(f"[full_run_pipeline_gpt] cmd={' '.join(cmd)}")
+    proc = subprocess.run(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        text=True,
+        capture_output=True,
+    )
+    if proc.stdout:
+        for line in proc.stdout.splitlines():
+            context.log.info(f"[full_run_pipeline_gpt] stdout: {line}")
+    if proc.stderr:
+        for line in proc.stderr.splitlines():
+            context.log.warning(f"[_gpt] stderr: {line}")
+
+    context.log.info(f"[full_run_pipeline_gpt] exit_code={proc.returncode}")
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout, stderr=proc.stderr)
+
+    run_dir = RUNS_DIR / context.run_id
+    return Output(
+        value=None,
+        metadata={
+            "run_dir": MetadataValue.path(str(run_dir)),
+            "out_dir": MetadataValue.path(str(run_dir / "out")),
+            "raw_dir": MetadataValue.path(str(run_dir / "raw")),
+        },
+    )

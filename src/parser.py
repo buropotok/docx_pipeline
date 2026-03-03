@@ -1,7 +1,7 @@
 # UltimateParserV43.py
-# Schema v2.13 parser: imports styles.xml into JSON styles library; uses p_style_id/r_style_id + inline r_format; numbering + pictures preserved; legacy synthetic styles removed.
+# Schema v2.14 parser: imports styles.xml into JSON styles library; uses p_style_id/r_style_id + inline r_format; numbering + pictures preserved; legacy synthetic styles removed.
 # Parser Version: v43
-# Schema Version: 2.13
+# Schema Version: 2.15
 # Rules Version: 0.3
 
 # Deterministic, visually-lossless for "forms" subset (no tables/images/fields/hyperlinks).
@@ -18,9 +18,11 @@ from lxml import etree
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from parser_picture import parse_picture_node
+from parser_table import parse_table_node
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
+MY_NS = "https://translatefactory/schema/custom-id"
 BASE_DIR = "."
 
 def qn(tag: str) -> str:
@@ -73,15 +75,23 @@ def _bool_from_attr(val: Optional[str]) -> Optional[bool]:
 def _map_line_rule(val: Optional[str]) -> Optional[str]:
     if val is None:
         return None
-    mapping = {
-        "auto": "AUTO",
-        "atLeast": "AT_LEAST",
-        "exact": "EXACT",
-        "AUTO": "AUTO",
-        "AT_LEAST": "AT_LEAST",
-        "EXACT": "EXACT",
+    # raw.schema.json v2.15 enum: "auto" | "atLeast" | "exact"
+    if val in ("auto", "atLeast", "exact"):
+        return val
+    # tolerate legacy variants if they appear (should not be emitted further)
+    legacy = {
+        "AUTO": "auto",
+        "AT_LEAST": "atLeast",
+        "EXACT": "exact",
     }
-    return mapping.get(val)
+    return legacy.get(val)
+
+
+def _require_my_id(el: etree._Element, what: str) -> str:
+    v = el.get(f"{{{MY_NS}}}id")
+    if v is None or not str(v).strip():
+        raise ValueError(f"Missing required my:id for {what}")
+    return str(v).strip()
 
 
 def _sym_encode(font: str, char: str) -> str:
@@ -145,8 +155,9 @@ class UltimateParserV43:
                 self.settings_xml = None
 
         # Счётчик для run_id
-        self._run_counter = 1
-        self._paragraph_counter = 1
+        self._paragraph_counter = 1  # больше не используется для корневых абзацев, но оставим для совместимости
+        self._table_counter = 1
+        self._row_counter = 1
         self.default_paragraph_style_id: Optional[str] = None
 
         self._init_word_styles()
@@ -234,7 +245,7 @@ class UltimateParserV43:
 
         result: Dict[str, Any] = {
             "meta": {
-                "schema_version": "2.13",
+                "schema_version": "2.15",
                 "rules_version": "0.3",
                 "producer": {
                     "name": "UltimateParserV43",
@@ -255,39 +266,23 @@ class UltimateParserV43:
         if isinstance(default_style_id, str) and default_style_id:
             result["meta"]["default_style_id"] = default_style_id
 
+        # Обходим дочерние элементы body: только корневые w:p и w:tbl.
+        # Контракт v2.15: единственный источник id для корневых элементов — атрибут my:id.
         body = self.document_xml.find(qn("w:body"))
-        paragraphs_count = 0
-        runs_count = 0
-
         if body is not None:
-            for p in body.findall(qn("w:p")):
-                paragraphs_count += 1
-                pPr = p.find(qn("w:pPr"))
-                p_style_id = self._get_inline_p_style_id(pPr)
-
-                item: Dict[str, Any] = {
-                    "type": "paragraph",
-                    "id": f"p_{self._paragraph_counter}",
-                    "p_style_id": p_style_id,
-                    "runs": self._parse_runs(p)
-                }
-                runs_count += len(item["runs"])
-
-                self._paragraph_counter += 1
-
-                p_inline = self._to_schema_p_format(self._parse_pPr(pPr, include_indent_origin=False))
-                if p_inline:
-                    item["p_format"] = p_inline
-
-                result["content"].append(item)
+            for child in body:
+                if child.tag == qn("w:p"):
+                    elem_id = _require_my_id(child, what="root paragraph (w:body > w:p)")
+                    result["content"].append(
+                        self._parse_paragraph_element(child, parent_id=None, index=None, root_id=elem_id)
+                    )
+                elif child.tag == qn("w:tbl"):
+                    table_id = _require_my_id(child, what="root table (w:body > w:tbl)")
+                    result["content"].append(parse_table_node(self, child, table_id))
+                # остальные элементы игнорируем – passthrough (sectPr, bookmarks, etc.)
 
         if os.getenv("DOCX_PIPELINE_VALIDATE_RAW") == "1":
             self._validate_raw_v212(result)
-
-        print(
-            f"[parser] summary styles_count={len(result['styles'])} "
-            f"paragraphs_count={paragraphs_count} runs_count={runs_count}"
-        )
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     def _get_inline_p_style_id(self, pPr: Optional[etree._Element]) -> str:
@@ -300,6 +295,9 @@ class UltimateParserV43:
         default_style = self._get_default_word_paragraph_style_id()
         if default_style:
             return default_style
+        # Если ни явный стиль, ни дефолтный не найдены, возвращаем "Normal"
+        # Это соответствует поведению Word и не ломает визуальную точность.
+        # При желании можно заменить на None и доработать схему.
         return "Normal"
 
     def _to_schema_p_format(self, old: Dict[str, Any]) -> Dict[str, Any]:
@@ -802,6 +800,51 @@ class UltimateParserV43:
         return out
 
     # =========================
+    # PARAGRAPH PARSING (выделено в отдельный метод)
+    # =========================
+
+    def _parse_paragraph_element(self, p: etree._Element, parent_id: Optional[str], index: Optional[int], root_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Парсит один элемент <w:p> и возвращает словарь абзаца.
+        Используется как для абзацев в body, так и для абзацев внутри таблиц.
+
+        Аргументы:
+            p – элемент <w:p>
+            parent_id – идентификатор родителя (для вложенных абзацев)
+            index – порядковый номер абзаца внутри родителя (начиная с 1) – только для вложенных
+            root_id – готовый идентификатор для корневого абзаца (когда parent_id is None)
+        """
+        pPr = p.find(qn("w:pPr"))
+        p_style_id = self._get_inline_p_style_id(pPr)
+
+        if parent_id is not None:
+            # вложенный абзац (в ячейке таблицы)
+            p_id = f"{parent_id}.p_{index}"
+        elif root_id is not None:
+            # корневой абзац с явным id из SDT
+            p_id = root_id
+        else:
+            # старый режим (для обратной совместимости, но в новом коде не должен использоваться)
+            p_id = f"p_{self._paragraph_counter}"
+            self._paragraph_counter += 1
+
+        runs = self._parse_runs(p, p_id)  # передаём id абзаца как родителя для run'ов
+        # Важно: для корневых абзацев self._paragraph_counter НЕ увеличивается
+
+        item: Dict[str, Any] = {
+            "type": "paragraph",
+            "id": p_id,
+            "p_style_id": p_style_id,
+            "runs": runs,
+        }
+
+        p_inline = self._to_schema_p_format(self._parse_pPr(pPr, include_indent_origin=False))
+        if p_inline:
+            item["p_format"] = p_inline
+
+        return item
+
+    # =========================
     # PARAGRAPH FORMATTING (pPr -> pFormat)
     # =========================
 
@@ -1052,14 +1095,18 @@ class UltimateParserV43:
     # RUNS PARSING (w:r children) -> schema runs[]
     # =========================
 
-    def _parse_runs(self, p: etree._Element) -> List[Dict[str, Any]]:
+    def _parse_runs(self, p: etree._Element, parent_id: str) -> List[Dict[str, Any]]:
         """
         Parse runs preserving token order and inline formatting.
+        parent_id – идентификатор родительского абзаца (например, "p_1")
         """
         out: List[Dict[str, Any]] = []
         first_emitted = False  # for meta.leading on first tab
+        run_counter = 1  # локальный счётчик run'ов для этого абзаца
 
         for child in p:
+            if run_counter > 1000:  # защита от бесконечного цикла (на всякий случай)
+                break
             if child.tag != qn("w:r"):
                 continue
 
@@ -1086,8 +1133,8 @@ class UltimateParserV43:
                     preserve = node.get(f"{{{XML_NS}}}space") == "preserve"
 
                     run_obj: Dict[str, Any] = {"type": "text", "text": txt}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj["id"] = f"{parent_id}.run_{run_counter}"
+                    run_obj["parent_id"] = parent_id
                     _attach_style_fields(run_obj)
                     if preserve:
                         run_obj["meta"] = {"preserve": True}
@@ -1098,8 +1145,8 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:tab"):
                     run_obj: Dict[str, Any] = {"type": "tab"}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj["id"] = f"{parent_id}.run_{run_counter}"
+                    run_obj["parent_id"] = parent_id
                     _attach_style_fields(run_obj)
 
                     # ADD: first visual token is a tab -> meta.leading=true
@@ -1111,8 +1158,8 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:br"):
                     run_obj: Dict[str, Any] = {"type": "break"}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj["id"] = f"{parent_id}.run_{run_counter}"
+                    run_obj["parent_id"] = parent_id
                     br_type = node.get(f"{{{W_NS}}}type")
                     if br_type in ("textWrapping", "page", "column"):
                         run_obj["break_type"] = br_type
@@ -1122,24 +1169,24 @@ class UltimateParserV43:
 
                 elif node.tag == qn("w:cr"):
                     run_obj: Dict[str, Any] = {"type": "cr"}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj["id"] = f"{parent_id}.run_{run_counter}"
+                    run_obj["parent_id"] = parent_id
                     _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
 
                 elif node.tag == qn("w:softHyphen"):
                     run_obj: Dict[str, Any] = {"type": "softHyphen"}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj["id"] = f"{parent_id}.run_{run_counter}"
+                    run_obj["parent_id"] = parent_id
                     _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
 
                 elif node.tag == qn("w:noBreakHyphen"):
                     run_obj: Dict[str, Any] = {"type": "noBreakHyphen"}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj["id"] = f"{parent_id}.run_{run_counter}"
+                    run_obj["parent_id"] = parent_id
                     _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
@@ -1147,17 +1194,20 @@ class UltimateParserV43:
                 elif node.tag == qn("w:sym"):
                     font = node.get(f"{{{W_NS}}}font") or ""
                     char = node.get(f"{{{W_NS}}}char") or ""
-                    run_obj: Dict[str, Any] = {"type": "sym", "text": _sym_encode(font, char)}
-                    run_obj["id"] = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_obj: Dict[str, Any] = {
+                        "type": "sym",
+                        "text": _sym_encode(font, char),
+                        "id": f"{parent_id}.run_{run_counter}",
+                        "parent_id": parent_id
+                    }
                     _attach_style_fields(run_obj)
                     out.append(run_obj)
                     first_emitted = True
 
                 elif node.tag == qn("w:drawing") or node.tag == qn("w:pict"):
                     # Обработка изображения
-                    run_id = f"run_{self._run_counter}"
-                    self._run_counter += 1
+                    run_id = f"{parent_id}.run_{run_counter}"
+                    # run_counter увеличится в конце цикла
                     pic_data = parse_picture_node(node, run_id, self.relationships)
                     if pic_data:
                         _attach_style_fields(pic_data)
@@ -1166,6 +1216,7 @@ class UltimateParserV43:
                 else:
                     # ignore unsupported nodes for "forms" subset
                     continue
+                run_counter += 1  # увеличиваем локальный счётчик после каждого обработанного run'а
 
         return out
 
@@ -1207,30 +1258,63 @@ class UltimateParserV43:
         if not isinstance(styles, dict):
             raise ValueError("RAW validation failed: styles must be an object")
 
-        for i, para in enumerate(result.get("content", [])):
-            if not isinstance(para, dict):
+        for i, item in enumerate(result.get("content", [])):
+            if not isinstance(item, dict):
                 raise ValueError(f"RAW validation failed: content[{i}] must be an object")
-            if "p_style_id" not in para:
-                raise ValueError(f"RAW validation failed: content[{i}] missing p_style_id")
-            if "runs" not in para or not isinstance(para["runs"], list):
-                raise ValueError(f"RAW validation failed: content[{i}] missing runs list")
-            for j, run in enumerate(para["runs"]):
-                if not isinstance(run, dict):
-                    raise ValueError(f"RAW validation failed: content[{i}].runs[{j}] must be object")
-                r_style_id = run.get("r_style_id")
-                if isinstance(r_style_id, str) and r_style_id not in styles:
-                    print(f"[parser] warn: r_style_id '{r_style_id}' missing in styles at content[{i}].runs[{j}]")
-                if run.get("type") == "picture":
-                    file_val = run.get("file")
-                    if not isinstance(file_val, str) or not file_val.startswith("media/"):
-                        raise ValueError(f"RAW validation failed: picture file must start with media/ at content[{i}].runs[{j}]")
-                    ext = run.get("extent")
-                    if ext is not None:
-                        if not isinstance(ext, dict):
-                            raise ValueError(f"RAW validation failed: picture extent must be object at content[{i}].runs[{j}]")
-                        for key in ("cx", "cy"):
-                            if key in ext and not isinstance(ext[key], int):
-                                raise ValueError(f"RAW validation failed: picture extent.{key} must be integer at content[{i}].runs[{j}]")
+
+            item_type = item.get("type")
+            if item_type == "paragraph":
+                if "p_style_id" not in item:
+                    raise ValueError(f"RAW validation failed: content[{i}] missing p_style_id")
+                if "runs" not in item or not isinstance(item["runs"], list):
+                    raise ValueError(f"RAW validation failed: content[{i}] missing runs list")
+                for j, run in enumerate(item["runs"]):
+                    if not isinstance(run, dict):
+                        raise ValueError(f"RAW validation failed: content[{i}].runs[{j}] must be object")
+                    r_style_id = run.get("r_style_id")
+                    if isinstance(r_style_id, str) and r_style_id not in styles:
+                        print(f"[parser] warn: r_style_id '{r_style_id}' missing in styles at content[{i}].runs[{j}]")
+                    if run.get("type") == "picture":
+                        file_val = run.get("file")
+                        if not isinstance(file_val, str) or not file_val.startswith("media/"):
+                            raise ValueError(
+                                f"RAW validation failed: picture file must start with media/ at content[{i}].runs[{j}]")
+                        ext = run.get("extent")
+                        if ext is not None:
+                            if not isinstance(ext, dict):
+                                raise ValueError(
+                                    f"RAW validation failed: picture extent must be object at content[{i}].runs[{j}]")
+                            for key in ("cx", "cy"):
+                                if key in ext and not isinstance(ext[key], int):
+                                    raise ValueError(
+                                        f"RAW validation failed: picture extent.{key} must be integer at content[{i}].runs[{j}]")
+            elif item_type == "table":
+                if "id" not in item:
+                    raise ValueError(f"RAW validation failed: table at content[{i}] missing id")
+                if "tblPr" in item and not isinstance(item["tblPr"], dict):
+                    raise ValueError(f"RAW validation failed: table tblPr must be object at content[{i}]")
+                if "tbl_grid" in item and not isinstance(item["tbl_grid"], list):
+                    raise ValueError(f"RAW validation failed: table tbl_grid must be array at content[{i}]")
+                if "rows" not in item or not isinstance(item["rows"], list):
+                    raise ValueError(f"RAW validation failed: table at content[{i}] missing rows list")
+                for j, row in enumerate(item["rows"]):
+                    if not isinstance(row, dict):
+                        raise ValueError(f"RAW validation failed: table[{i}].rows[{j}] must be object")
+                    if "id" not in row:
+                        raise ValueError(f"RAW validation failed: table[{i}].rows[{j}] missing id")
+                    if "cells" not in row or not isinstance(row["cells"], list):
+                        raise ValueError(f"RAW validation failed: table[{i}].rows[{j}] missing cells list")
+                    for k, cell in enumerate(row["cells"]):
+                        if not isinstance(cell, dict):
+                            raise ValueError(f"RAW validation failed: table[{i}].rows[{j}].cells[{k}] must be object")
+                        if "content" not in cell or not isinstance(cell["content"], list):
+                            raise ValueError(
+                                f"RAW validation failed: table[{i}].rows[{j}].cells[{k}] missing content list")
+            elif item_type == "shape":
+                if "shape" not in item:
+                    raise ValueError(f"RAW validation failed: shape at content[{i}] missing shape property")
+            else:
+                raise ValueError(f"RAW validation failed: unknown content type '{item_type}' at content[{i}]")
 
     def dump_donor_xml_parts(self, out_root_dir: str) -> None:
         os.makedirs(out_root_dir, exist_ok=True)
