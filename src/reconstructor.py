@@ -1,5 +1,6 @@
 # reconstructor.py
 # Minimal reconstructor with indexing and root deletion (step 2)
+# Accepts donor DOCX file directly (extracts to temp dir)gpt
 
 from __future__ import annotations
 
@@ -12,13 +13,17 @@ from typing import Any, Dict, List, Optional
 from lxml import etree
 import sys
 import re
+import tempfile
+import shutil
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 MY_NS = "https://translatefactory/schema/custom-id"
 WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"  # for future use
 
+
 def qn_w(local: str) -> str:
     return f"{{{W_NS}}}{local}"
+
 
 def qn_my(local: str) -> str:
     return f"{{{MY_NS}}}{local}"
@@ -40,6 +45,8 @@ class ReconstructorV215:
         self.row_by_id: Dict[str, etree._Element] = {}
         self.para_by_id: Dict[str, etree._Element] = {}
         self.original_children: List[etree._Element] = []
+
+        self.temp_dir: Optional[str] = None
 
     def _copy_donor_files(self) -> None:
         """Copy all donor files except word/document.xml into package_files."""
@@ -133,62 +140,91 @@ class ReconstructorV215:
         # Optionally update original_children to reflect new state (for future steps)
         self.original_children = new_working
 
-    def build_docx(self, out_docx_path: str) -> None:
-        # Determine donor directory: <run_dir>/raw/materialized
-        run_dir = os.path.dirname(os.path.dirname(self.raw_json_path))
-        self.donor_raw_dir = os.path.join(run_dir, "raw", "materialized")
+    def build_docx(self, out_docx_path: str, donor_docx_path: str) -> None:
+        """
+        Build reconstructed DOCX from donor DOCX and JSON.
 
-        # Copy all donor files except word/document.xml
-        self._copy_donor_files()
+        Args:
+            out_docx_path: path to output DOCX file
+            donor_docx_path: path to donor DOCX file (with my:id attributes)
+        """
+        # Create temporary directory for donor extraction
+        self.temp_dir = tempfile.mkdtemp(prefix="reconstructor_")
+        try:
+            # Extract donor DOCX to temp directory
+            print(f"Extracting {donor_docx_path} to {self.temp_dir}")
+            with zipfile.ZipFile(donor_docx_path, "r") as z:
+                z.extractall(self.temp_dir)
 
-        # Load donor document.xml
-        donor_doc_path = os.path.join(self.donor_raw_dir, "word", "document.xml")
-        if not os.path.exists(donor_doc_path):
-            raise FileNotFoundError(f"Donor document.xml not found at {donor_doc_path}")
+            self.donor_raw_dir = self.temp_dir
 
-        parser = etree.XMLParser(remove_blank_text=False, recover=False, huge_tree=True)
-        doc_tree = etree.parse(donor_doc_path, parser)
-        doc_root = doc_tree.getroot()
-        body = doc_root.find(qn_w("body"))
-        if body is None:
-            raise ValueError("Document has no w:body")
+            # Copy all donor files except word/document.xml into package_files
+            self._copy_donor_files()
 
-        # Build indices (does not modify XML)
-        self._build_indices(body)
+            # Load donor document.xml
+            donor_doc_path = os.path.join(self.temp_dir, "word", "document.xml")
+            if not os.path.exists(donor_doc_path):
+                raise FileNotFoundError(f"word/document.xml not found in {donor_docx_path}")
 
-        # Apply root deletions (modifies body)
-        self._apply_root_deletions(body)
+            parser = etree.XMLParser(remove_blank_text=False, recover=False, huge_tree=True)
+            doc_tree = etree.parse(donor_doc_path, parser)
+            doc_root = doc_tree.getroot()
+            body = doc_root.find(qn_w("body"))
+            if body is None:
+                raise ValueError("Document has no w:body")
 
-        # Serialize document.xml (now with deletions) and add to package
-        self.package_files["word/document.xml"] = etree.tostring(
-            doc_root,
-            xml_declaration=True,
-            encoding="UTF-8",
-            standalone=None,
-            pretty_print=False
-        )
+            # Build indices (does not modify XML)
+            self._build_indices(body)
 
-        # Create output zip
-        os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
-        with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
-            for name in sorted(self.package_files.keys()):
-                zout.writestr(name, self.package_files[name])
+            # Apply root deletions (modifies body)
+            self._apply_root_deletions(body)
 
-        print(f"Reconstruction (step 2: root deletions) completed. Output: {out_docx_path}")
+            # Serialize document.xml (now with deletions) and add to package
+            self.package_files["word/document.xml"] = etree.tostring(
+                doc_root,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone=None,
+                pretty_print=False
+            )
+
+            # Create output zip
+            os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
+            with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+                for name in sorted(self.package_files.keys()):
+                    zout.writestr(name, self.package_files[name])
+
+            print(f"Reconstruction (step 2: root deletions) completed. Output: {out_docx_path}")
+
+        finally:
+            # Clean up temporary directory
+            if self.temp_dir and os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+                print(f"Cleaned up temporary directory: {self.temp_dir}")
+
+    def _cleanup(self) -> None:
+        """Clean up temporary directory if it exists."""
+        if self.temp_dir and os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+            self.temp_dir = None
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Reconstructor v2.15 (step 2: root deletions)")
     parser.add_argument("--in-json", dest="input_json", required=True)
     parser.add_argument("--out-docx", dest="output_docx", required=True)
+    parser.add_argument("--donor-docx", dest="donor_docx", required=True,
+                        help="Path to donor DOCX file (with my:id attributes)")
     args = parser.parse_args()
 
     try:
         recon = ReconstructorV215(args.input_json)
-        recon.build_docx(args.output_docx)
+        recon.build_docx(args.output_docx, args.donor_docx)
     except Exception:
         import traceback
         traceback.print_exc()
+        if hasattr(recon, '_cleanup'):
+            recon._cleanup()
         sys.exit(1)
 
 
