@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Dagster
+.tmp_dagster_home_*/
+data/runs/*/  # если хотите игнорировать все запуски
+!data/runs/.gitkeep  # если нужно сохранить структуру папок
+
+# Тестовые результаты
+test_results/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
