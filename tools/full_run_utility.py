@@ -142,7 +142,8 @@ def main() -> None:
     _run_cmd([py, "src/parser.py", "--in", str(p.materialized_docx), "--out", str(p.raw_json)], "parser")
 
     # 5) reconstructor -> out/<stem>.reconstructed.docx
-    _run_cmd([py, "src/reconstructor.py", "--in-json", str(p.raw_json), "--out-docx", str(p.reconstructed_docx)], "reconstructor")
+    _run_cmd([py, "src/reconstructor.py", "--in-json", str(p.raw_json), "--out-docx", str(p.reconstructed_docx),
+              "--donor-docx", str(p.materialized_docx)], "reconstructor")
 
     # 6) raw reconstruction extraction
     _extract_docx_raw(p.reconstructed_docx, p.raw_reconstructed, "raw_reconstructed")

@@ -1,0 +1,93 @@
+=== РќРђР§РђР›Рћ Р›РћР“Рђ Р Р•РљРћРќРЎРўР РЈРљРўРћР Рђ ===
+
+
+======================================================================
+РўР•РЎРў 4: РџР°СЂР°РіСЂР°С„С‹ РІРЅСѓС‚СЂРё СЏС‡РµРµРє
+======================================================================
+рџ“Њ РўР°Р±Р»РёС†Р°: tbl_1
+рџ“Њ РЎС‚СЂРѕРєР°: tbl_1.row_1
+рџ“Њ РЇС‡РµР№РєР°: 1
+   РџР°СЂР°РіСЂР°С„РѕРІ РІ СЏС‡РµР№РєРµ: 4
+   ID РїР°СЂР°РіСЂР°С„РѕРІ: ['tbl_1.row_1.cell_1.p_1', 'tbl_1.row_1.cell_1.p_2', 'tbl_1.row_1.cell_1.p_3', 'tbl_1.row_1.cell_1.p_4']
+   рџ”Ќ РќРѕРІС‹Р№ РїР°СЂР°РіСЂР°С„ p_5: {
+  "type": "paragraph",
+  "id": "tbl_1.row_1.cell_1.p_5",
+  "derive_from": "tbl_1.row_1.cell_1.p_1",
+  "p_style_id": "a",
+  "runs": [
+    {
+      "type": "text",
+      "text": "Р­РўРћ РќРћР’Р«Р™ РџРђР РђР“Р РђР¤",
+      "r_format": {
+        "bold": true,
+        "color": "FF0000"
+      }
+    }
+  ]
+}
+   рџ”Ќ derive_from: tbl_1.row_1.cell_1.p_1
+   JSON РїР°СЂР°РіСЂР°С„РѕРІ РґР»СЏ РѕС‚РїСЂР°РІРєРё: ['tbl_1.row_1.cell_1.p_1', 'tbl_1.row_1.cell_1.p_5', 'tbl_1.row_1.cell_1.p_3', 'tbl_1.row_1.cell_1.p_4']
+   РР· РЅРёС… РЅРѕРІС‹С…: ['tbl_1.row_1.cell_1.p_5']
+==================================================
+reconstructor_table.py ЗАГРУЖЕН!!!
+==================================================
+reconstructor_table.py загружен!
+
+ build_docx: начало
+   out_docx_path: C:\Users\sokol\AppData\Local\Temp\table_test_ine70yy0\output.docx
+   donor_docx_path: src/test_deep_seek/donor.materialized.docx
+Extracting src/test_deep_seek/donor.materialized.docx to C:\Users\sokol\AppData\Local\Temp\reconstructor_mf0__0sf
+
+ _process_content: начало обработки
+   content элементов в JSON: 59
+
+ _process_table для таблицы tbl_1
+   JSON rows: ['tbl_1.row_1', 'tbl_1.row_2', 'tbl_1.row_3', 'tbl_1.row_4']
+
+ Обработка ячейки tbl_1.row_1.cell_1
+   tc (XML): <Element {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tc at 0x28195c79100>
+   cell_item (JSON): tbl_1.row_1.cell_1
+   paras_json: ['tbl_1.row_1.cell_1.p_1', 'tbl_1.row_1.cell_1.p_5', 'tbl_1.row_1.cell_1.p_3', 'tbl_1.row_1.cell_1.p_4']
+
+ ПЕРЕД ВЫЗОВОМ apply_cell_paragraph_ops:
+   row_id: tbl_1.row_1
+   cell_index: 1
+   paras_json: [{'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_1', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'П', 'id': 'tbl_1.row_1.cell_1.p_1.run_1', 'parent_id': 'tbl_1.row_1.cell_1.p_1', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}, {'type': 'text', 'text': 'вавава', 'id': 'tbl_1.row_1.cell_1.p_1.run_2', 'parent_id': 'tbl_1.row_1.cell_1.p_1', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}], 'p_format': {'alignment': 'center', 'indent_end_twip': -79}}, {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_5', 'derive_from': 'tbl_1.row_1.cell_1.p_1', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'ЭТО НОВЫЙ ПАРАГРАФ', 'r_format': {'bold': True, 'color': '00FF00'}}]}, {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_3', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'Ывмымвы', 'id': 'tbl_1.row_1.cell_1.p_3.run_1', 'parent_id': 'tbl_1.row_1.cell_1.p_3', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}], 'p_format': {'alignment': 'center', 'indent_end_twip': -79}}, {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_4', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'ывмы', 'id': 'tbl_1.row_1.cell_1.p_4.run_1', 'parent_id': 'tbl_1.row_1.cell_1.p_4', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}], 'p_format': {'alignment': 'center', 'indent_end_twip': -79}}]
+
+ apply_cell_paragraph_ops для ячейки tbl_1.row_1.cell_1
+   json_paragraphs получен: [{'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_1', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'П', 'id': 'tbl_1.row_1.cell_1.p_1.run_1', 'parent_id': 'tbl_1.row_1.cell_1.p_1', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}, {'type': 'text', 'text': 'вавава', 'id': 'tbl_1.row_1.cell_1.p_1.run_2', 'parent_id': 'tbl_1.row_1.cell_1.p_1', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}], 'p_format': {'alignment': 'center', 'indent_end_twip': -79}}, {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_5', 'derive_from': 'tbl_1.row_1.cell_1.p_1', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'ЭТО НОВЫЙ ПАРАГРАФ', 'r_format': {'bold': True, 'color': '00FF00'}}]}, {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_3', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'Ывмымвы', 'id': 'tbl_1.row_1.cell_1.p_3.run_1', 'parent_id': 'tbl_1.row_1.cell_1.p_3', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}], 'p_format': {'alignment': 'center', 'indent_end_twip': -79}}, {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_4', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'ывмы', 'id': 'tbl_1.row_1.cell_1.p_4.run_1', 'parent_id': 'tbl_1.row_1.cell_1.p_4', 'r_format': {'rFonts': {'ascii': 'Cambria', 'hAnsi': 'Cambria'}, 'color': '00FF00'}}], 'p_format': {'alignment': 'center', 'indent_end_twip': -79}}]
+   тип json_paragraphs: <class 'list'>
+   длина json_paragraphs: 4
+   Оригинальные параграфы в ячейке: ['tbl_1.row_1.cell_1.p_1', 'tbl_1.row_1.cell_1.p_2', 'tbl_1.row_1.cell_1.p_3', 'tbl_1.row_1.cell_1.p_4']
+   JSON параграфов: ['tbl_1.row_1.cell_1.p_1', 'tbl_1.row_1.cell_1.p_5', 'tbl_1.row_1.cell_1.p_3', 'tbl_1.row_1.cell_1.p_4']
+   Проверка tbl_1.row_1.cell_1.p_1: is_new_id = False
+   Проверка tbl_1.row_1.cell_1.p_5: is_new_id = False
+    НАЙДЕН P_5 в JSON: {'type': 'paragraph', 'id': 'tbl_1.row_1.cell_1.p_5', 'derive_from': 'tbl_1.row_1.cell_1.p_1', 'p_style_id': 'a', 'runs': [{'type': 'text', 'text': 'ЭТО НОВЫЙ ПАРАГРАФ', 'r_format': {'bold': True, 'color': '00FF00'}}]}
+      derive_from: tbl_1.row_1.cell_1.p_1
+      runs: [{'type': 'text', 'text': 'ЭТО НОВЫЙ ПАРАГРАФ', 'r_format': {'bold': True, 'color': '00FF00'}}]
+   Проверка tbl_1.row_1.cell_1.p_3: is_new_id = False
+   Проверка tbl_1.row_1.cell_1.p_4: is_new_id = False
+Traceback (most recent call last):
+  File "C:\Users\sokol\PycharmProjects\Buropotok\docx_pipeline\src\reconstructor.py", line 630, in main
+    recon.build_docx(args.output_docx, args.donor_docx)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sokol\PycharmProjects\Buropotok\docx_pipeline\src\reconstructor.py", line 587, in build_docx
+    self._process_content(body)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\sokol\PycharmProjects\Buropotok\docx_pipeline\src\reconstructor.py", line 406, in _process_content
+    self._process_table(tbl_el, tbl_json)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sokol\PycharmProjects\Buropotok\docx_pipeline\src\reconstructor.py", line 353, in _process_table
+    planned, final_paras = rt.apply_cell_paragraph_ops(
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        tc,
+        ^^^
+    ...<3 lines>...
+        clone_paragraph=lambda p: deepcopy(p),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\sokol\PycharmProjects\Buropotok\docx_pipeline\src\reconstructor_table.py", line 523, in apply_cell_paragraph_ops
+    raise ValueError(f"Cell paragraph '{pid}' not found in donor (fatal).")
+ValueError: Cell paragraph 'tbl_1.row_1.cell_1.p_5' not found in donor (fatal).
+Cleaned up temporary directory: C:\Users\sokol\AppData\Local\Temp\reconstructor_mf0__0sf

@@ -1,6 +1,6 @@
 # reconstructor_picture.py
-# Упрощённая вставка изображений: использует существующие relation_id из JSON.
-# Не создаёт новые отношения и не копирует файлы.
+# Вставка изображений в document.xml
+# Использует существующие relation_id из JSON, не создаёт новые отношения
 
 from __future__ import annotations
 
@@ -15,9 +15,9 @@ R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 
 def add_picture_to_document(
-    run_data: Dict[str, Any],
-    parent_element: etree._Element,  # w:r
-    next_drawing_id: int,
+        run_data: Dict[str, Any],
+        parent_element: etree._Element,  # w:r
+        next_drawing_id: int,
 ) -> int:
     """
     Добавляет элемент <w:drawing> в parent_element, используя существующий relation_id.
@@ -27,9 +27,11 @@ def add_picture_to_document(
     relation_id = run_data.get("relation_id")
     if not relation_id:
         raise ValueError("Picture run missing relation_id")
+
     extent = run_data.get("extent")
     if not isinstance(extent, dict):
         raise ValueError("Picture run missing extent")
+
     cx = extent.get("cx")
     cy = extent.get("cy")
     if cx is None or cy is None:
@@ -38,6 +40,7 @@ def add_picture_to_document(
     # Создаём w:drawing
     drawing = etree.SubElement(parent_element, f"{{{W_NS}}}drawing")
 
+    # wp:inline
     inline = etree.SubElement(
         drawing,
         f"{{{WP_NS}}}inline",
@@ -82,7 +85,7 @@ def add_picture_to_document(
     # pic:nvPicPr
     nv_pic_pr = etree.SubElement(pic, f"{{{PIC_NS}}}nvPicPr")
     c_nv_pr = etree.SubElement(nv_pic_pr, f"{{{PIC_NS}}}cNvPr")
-    c_nv_pr.set("id", str(next_drawing_id - 1))  # используем тот же id, что и у docPr
+    c_nv_pr.set("id", str(next_drawing_id - 1))  # тот же id, что и у docPr
     c_nv_pr.set("name", run_data.get("file", ""))
 
     c_nv_pic_pr = etree.SubElement(nv_pic_pr, f"{{{PIC_NS}}}cNvPicPr")
