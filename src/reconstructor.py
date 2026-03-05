@@ -51,13 +51,7 @@ class ReconstructorV215:
         self.para_by_id: Dict[str, etree._Element] = {}
         self.original_children: List[etree._Element] = []
 
-        self.temp_dir: Optional[str] = None
-
         self._new_id_pattern = re.compile(r'\.\d+$')
-
-        self.root_by_id: Dict[str, etree.Element] = {}
-        self.row_by_id: Dict[str, etree.Element] = {}
-        self.para_by_id: Dict[str, etree.Element] = {}
 
     def _copy_donor_files(self) -> None:
         """Copy all donor files except word/document.xml into package_files."""
@@ -283,26 +277,42 @@ class ReconstructorV215:
 
     def _patch_pPr(self, p: etree._Element, p_format: Optional[Dict[str, Any]]) -> None:
         """
-        Surgically update paragraph properties based on p_format JSON.
-        Only modifies properties that are present in the patch.
+        Хирургическое обновление свойств параграфа.
+        Маппит значения из JSON в OOXML согласно схеме raw.schema.json v2.15.
         """
         if not isinstance(p_format, dict) or not p_format:
             return
-        
-        # Find or create pPr element
+
+        # Находим существующий pPr
         pPr = p.find(qn_w("pPr"))
         if pPr is None:
-            pPr = etree.SubElement(p, qn_w("pPr"))
-        
-        # 1. Alignment (w:jc)
+            return
+
+        # ========== ALIGNMENT (w:jc) ==========
+        # Схема: alignmentEnum = ["left", "center", "right", "justify", "distribute"]
+        # OOXML: left, center, right, both, distribute
         if "alignment" in p_format and p_format["alignment"] is not None:
-            # Remove existing jc elements
-            for old in pPr.findall(qn_w("jc")):
-                pPr.remove(old)
-            jc = etree.SubElement(pPr, qn_w("jc"))
-            jc.set(qn_w("val"), str(p_format["alignment"]))
-        
-        # 2. Indents (w:ind)
+            val = str(p_format["alignment"])
+            # Маппинг: justify -> both
+            if val == "justify":
+                val = "both"
+            # Остальные значения оставляем как есть (left, center, right, distribute)
+
+            jc = pPr.find(qn_w("jc"))
+            if jc is not None:
+                jc.set(qn_w("val"), val)
+
+        # ========== TEXT ALIGNMENT (w:textAlignment) ==========
+        # Схема: textAlignmentEnum = ["auto", "baseline", "top", "center", "bottom"]
+        # OOXML: auto, baseline, top, center, bottom (полное совпадение)
+        if "text_alignment" in p_format and p_format["text_alignment"] is not None:
+            val = str(p_format["text_alignment"])
+            ta = pPr.find(qn_w("textAlignment"))
+            if ta is not None:
+                ta.set(qn_w("val"), val)
+
+        # ========== INDENTS (w:ind) ==========
+        # Все значения integer, маппинг не требуется
         indent_keys = {
             "indent_start_twip": "left",
             "indent_end_twip": "right",
@@ -313,35 +323,45 @@ class ReconstructorV215:
             ind = pPr.find(qn_w("ind"))
             if ind is None:
                 ind = etree.SubElement(pPr, qn_w("ind"))
-            
+
             for json_key, attr_name in indent_keys.items():
                 if json_key in p_format and p_format[json_key] is not None:
-                    ind.set(qn_w(attr_name), str(p_format[json_key]))
-        
-        # 3. Spacing (w:spacing)
+                    value = p_format[json_key]
+                    if isinstance(value, int):
+                        ind.set(qn_w(attr_name), str(value))
+
+        # ========== SPACING (w:spacing) ==========
         spacing_keys = {
             "space_before_twip": "before",
             "space_after_twip": "after",
             "line_spacing_twip": "line",
-            "line_rule": "lineRule",
-            "before_autospacing": "beforeAutospacing",
-            "after_autospacing": "afterAutospacing",
             "space_before_lines": "beforeLines",
             "space_after_lines": "afterLines",
+            "before_autospacing": "beforeAutospacing",
+            "after_autospacing": "afterAutospacing",
         }
-        if any(k in p_format for k in spacing_keys):
+        if any(k in p_format for k in spacing_keys) or "line_rule" in p_format:
             spacing = pPr.find(qn_w("spacing"))
             if spacing is None:
                 spacing = etree.SubElement(pPr, qn_w("spacing"))
-            
+
+            # Числовые значения
             for json_key, attr_name in spacing_keys.items():
                 if json_key in p_format and p_format[json_key] is not None:
                     value = p_format[json_key]
-                    if isinstance(value, bool):
-                        value = "1" if value else "0"
-                    spacing.set(qn_w(attr_name), str(value))
-        
-        # 4. Boolean flags (presence elements)
+                    if isinstance(value, int):
+                        spacing.set(qn_w(attr_name), str(value))
+                    elif isinstance(value, bool):
+                        spacing.set(qn_w(attr_name), "1" if value else "0")
+
+            # line_rule (enum, но значения совпадают)
+            if "line_rule" in p_format and p_format["line_rule"] is not None:
+                val = str(p_format["line_rule"])
+                # Схема: ["auto", "exact", "atLeast"] - всё совпадает с OOXML
+                spacing.set(qn_w("lineRule"), val)
+
+        # ========== BOOLEAN FLAGS ==========
+        # Все boolean, только присутствие/отсутствие элемента
         bool_flags = {
             "keep_next": "keepNext",
             "keep_lines": "keepLines",
@@ -352,20 +372,69 @@ class ReconstructorV215:
         }
         for json_key, tag in bool_flags.items():
             if json_key in p_format and p_format[json_key] is not None:
-                existing = pPr.find(qn_w(tag))
+                tag_qn = qn_w(tag)
                 if p_format[json_key]:
-                    if existing is None:
-                        etree.SubElement(pPr, qn_w(tag))
+                    # Добавляем элемент если его нет
+                    if pPr.find(tag_qn) is None:
+                        etree.SubElement(pPr, tag_qn)
                 else:
+                    # Удаляем элемент если он есть
+                    existing = pPr.find(tag_qn)
                     if existing is not None:
                         pPr.remove(existing)
-        
-        # 5. Text alignment (w:textAlignment)
-        if "text_alignment" in p_format and p_format["text_alignment"] is not None:
-            for old in pPr.findall(qn_w("textAlignment")):
-                pPr.remove(old)
-            ta = etree.SubElement(pPr, qn_w("textAlignment"))
-            ta.set(qn_w("val"), str(p_format["text_alignment"]))
+
+        # ========== TABS (w:tabs) ==========
+        # Схема: массив tabStop с полями posTwip, val, leader (опционально)
+        if "tabs" in p_format and isinstance(p_format["tabs"], list):
+            tabs_el = pPr.find(qn_w("tabs"))
+            if tabs_el is None:
+                tabs_el = etree.SubElement(pPr, qn_w("tabs"))
+            else:
+                # Очищаем существующие табуляции
+                for tab in tabs_el.findall(qn_w("tab")):
+                    tabs_el.remove(tab)
+
+            for tab_item in p_format["tabs"]:
+                if not isinstance(tab_item, dict):
+                    continue
+
+                tab = etree.SubElement(tabs_el, qn_w("tab"))
+
+                # posTwip - обязательное поле
+                if "posTwip" in tab_item and tab_item["posTwip"] is not None:
+                    tab.set(qn_w("pos"), str(tab_item["posTwip"]))
+
+                # val - обязательное поле (значения из OOXML: left, center, right, decimal, bar, clear, end, num, start)
+                if "val" in tab_item and tab_item["val"] is not None:
+                    tab.set(qn_w("val"), str(tab_item["val"]))
+
+                # leader - опционально (none, dot, hyphen, underscore, middleDot, etc.)
+                if "leader" in tab_item and tab_item["leader"] is not None:
+                    tab.set(qn_w("leader"), str(tab_item["leader"]))
+
+        # ========== NUMBERING (w:numPr) ==========
+        # Схема: list_info = {"numId": string, "ilvl": string}
+        if "list_info" in p_format and isinstance(p_format["list_info"], dict):
+            list_info = p_format["list_info"]
+            numPr = pPr.find(qn_w("numPr"))
+            if numPr is None:
+                numPr = etree.SubElement(pPr, qn_w("numPr"))
+
+            # ilvl
+            if "ilvl" in list_info and list_info["ilvl"] is not None:
+                ilvl = numPr.find(qn_w("ilvl"))
+                if ilvl is None:
+                    ilvl = etree.SubElement(numPr, qn_w("ilvl"))
+                ilvl.set(qn_w("val"), str(list_info["ilvl"]))
+
+            # numId
+            if "numId" in list_info and list_info["numId"] is not None:
+                numId = numPr.find(qn_w("numId"))
+                if numId is None:
+                    numId = etree.SubElement(numPr, qn_w("numId"))
+                numId.set(qn_w("val"), str(list_info["numId"]))
+
+        # ========== ВСЁ! НИКАКОЙ ПЕРЕСТРОЙКИ ПОРЯДКА ==========
 
     def _process_paragraph(self, p_el: etree._Element, p_json: Dict[str, Any]) -> None:
         """
@@ -375,7 +444,23 @@ class ReconstructorV215:
         if "p_format" in p_json:
             self._patch_pPr(p_el, p_json.get("p_format"))
 
-        # Rebuild runs (already implemented in _process_content and _process_table)
+        # Rebuild runs
+        runs = p_json.get("runs", [])
+
+        # Remove all existing runs
+        for r in p_el.findall(qn_w("r")):
+            p_el.remove(r)
+
+        if not runs:
+            # Добавляем пустой run, чтобы параграф не был пустым
+            empty_run = etree.SubElement(p_el, qn_w("r"))
+            empty_run.set(qn_my("id"), f"{p_json.get('id')}.run_1")
+            etree.SubElement(empty_run, qn_w("t")).text = ""
+        else:
+            for run_idx, run_data in enumerate(runs, start=1):
+                new_run, self.next_drawing_id = self._build_run(run_data, p_json.get("id"), run_idx,
+                                                                self.next_drawing_id)
+                p_el.append(new_run)
 
     def _process_table(self, tbl: etree._Element, tbl_json: Dict[str, Any]) -> None:
         """
@@ -387,6 +472,10 @@ class ReconstructorV215:
         print(f"   JSON rows: {[row.get('id') for row in tbl_json.get('rows', [])]}")
 
         rows_json = tbl_json.get("rows", [])
+
+        # Обновляем свойства таблицы
+        rt.patch_tblPr(tbl, tbl_json.get("tblPr"))
+        rt.patch_tbl_grid(tbl, tbl_json.get("tbl_grid"))
         if not isinstance(rows_json, list):
             raise ValueError(f"Table '{tbl_json.get('id')}' rows must be array")
 
@@ -422,6 +511,9 @@ class ReconstructorV215:
                 if tr is None:
                     raise ValueError(f"Row '{row_id}' not found in donor")
 
+            # Обновляем свойства строки
+            rt.patch_trPr(tr, row_item.get("trPr"))
+
             # Process cells in this row
             cells_json = row_item.get("cells", [])
             if not isinstance(cells_json, list):
@@ -438,15 +530,12 @@ class ReconstructorV215:
                 if not isinstance(cell_item, dict):
                     raise ValueError(f"Row '{row_id}' cell[{ci}] must be object")
 
-                print(f"\n Обработка ячейки {row_id}.cell_{ci}")
-                print(f"   tc (XML): {tc}")
-                print(f"   cell_item (JSON): {cell_item.get('id')}")
-                print(f"   paras_json: {[p.get('id') for p in cell_item.get('content', [])]}")
+                # Обновляем свойства ячейки
+                rt.patch_tcPr(tc, cell_item.get("tcPr"))
 
                 # Process paragraphs inside cell
                 paras_json = cell_item.get("content", [])
-                # Process paragraphs inside cell
-                paras_json = cell_item.get("content", [])
+
                 if not isinstance(paras_json, list):
                     raise ValueError(f"Row '{row_id}' cell[{ci}] content must be array")
 
@@ -475,7 +564,6 @@ class ReconstructorV215:
                     for r in p_el.findall(qn_w("r")):
                         p_el.remove(r)
 
-                    # Add new runs
                     for run_idx, run_data in enumerate(runs, start=1):
                         new_run, self.next_drawing_id = self._build_run(run_data, pid, run_idx,
                                                                         self.next_drawing_id)
@@ -516,11 +604,9 @@ class ReconstructorV215:
 
         # Then process root paragraphs
         for p_el, p_json in paragraphs_to_process:
-            # Rebuild runs for root paragraphs
+            # _process_paragraph теперь сам перестраивает run'ы
             self._process_paragraph(p_el, p_json)
-            for run_idx, run_data in enumerate(p_json.get("runs", []), start=1):
-                new_run, self.next_drawing_id = self._build_run(run_data, p_json.get("id"), run_idx, self.next_drawing_id)
-                p_el.append(new_run)
+
 
     def _is_new_id(self, elem_id: str) -> bool:
         """Check if element id indicates a newly created element (contains .digits at end)."""
@@ -716,11 +802,77 @@ class ReconstructorV215:
                 pretty_print=False
             )
 
+            # Сохраняем XML для отладки
+            debug_xml_path = os.path.join(self.temp_dir, "debug_document.xml")
+            with open(debug_xml_path, 'wb') as f:
+                f.write(self.package_files["word/document.xml"])
+            print(f"DEBUG: XML saved to {debug_xml_path}")
+
+            # Проверяем XML на валидность
+            try:
+                parser = etree.XMLParser()
+                etree.fromstring(self.package_files["word/document.xml"], parser=parser)
+                print("DEBUG: XML is valid")
+            except Exception as e:
+                print(f"DEBUG: XML is INVALID: {e}")
+                # Сохраняем первые 1000 символов для анализа
+                print(self.package_files["word/document.xml"][:1000].decode('utf-8', errors='ignore'))
+
             # Create output zip
             os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
             with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
                 for name in sorted(self.package_files.keys()):
                     zout.writestr(name, self.package_files[name])
+
+            # После создания zip, добавьте:
+            print("\n" + "=" * 50)
+            print("DIAGNOSTIC: ZIP file contents")
+            print("=" * 50)
+
+            with zipfile.ZipFile(out_docx_path, 'r') as zout_check:
+                files = zout_check.namelist()
+                print(f"Total files in ZIP: {len(files)}")
+
+                # Группируем файлы по папкам
+                word_files = [f for f in files if f.startswith("word/") and not f.startswith("word/media/")]
+                media_files = [f for f in files if f.startswith("word/media/")]
+                rels_files = [f for f in files if "_rels/" in f]
+                other_files = [f for f in files if not f.startswith("word/") and not "_rels/" in f]
+
+                print(f"\nword/ files: {len(word_files)}")
+                for f in sorted(word_files)[:10]:
+                    info = zout_check.getinfo(f)
+                    print(f"  - {f:30} {info.file_size:6} bytes")
+
+                print(f"\nword/media/ files: {len(media_files)}")
+                for f in sorted(media_files):
+                    info = zout_check.getinfo(f)
+                    print(f"  - {f:30} {info.file_size:6} bytes")
+
+                print(f"\n_rels/ files: {len(rels_files)}")
+                for f in sorted(rels_files):
+                    info = zout_check.getinfo(f)
+                    print(f"  - {f:30} {info.file_size:6} bytes")
+
+                print(f"\nOther files: {len(other_files)}")
+                for f in sorted(other_files):
+                    info = zout_check.getinfo(f)
+                    print(f"  - {f:30} {info.file_size:6} bytes")
+
+                # Проверяем критические файлы
+                print("\nCritical files check:")
+                critical = [
+                    "[Content_Types].xml",
+                    "word/document.xml",
+                    "word/_rels/document.xml.rels"
+                ]
+                for crit in critical:
+                    if crit in files:
+                        print(f"  + {crit} present")
+                    else:
+                        print(f"  - {crit} MISSING!")
+
+            print("=" * 50)
 
             print(f"Reconstruction (step 2: root deletions) completed. Output: {out_docx_path}")
 
