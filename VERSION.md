@@ -2,10 +2,10 @@
 
 Current synchronized versions:
 
-Schema: 2.12
-Rules: 0.3
+Schema: 2.16
+Rules: 0.4
 Parser: v43
-Reconstructor: v12
+Reconstructor: v2.15
 
 ---
 
