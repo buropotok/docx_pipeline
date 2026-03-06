@@ -286,7 +286,7 @@ class ReconstructorV215:
         # Находим существующий pPr
         pPr = p.find(qn_w("pPr"))
         if pPr is None:
-            return
+            pPr = etree.SubElement(p, qn_w("pPr"))
 
         # ========== ALIGNMENT (w:jc) ==========
         # Схема: alignmentEnum = ["left", "center", "right", "justify", "distribute"]
@@ -451,16 +451,10 @@ class ReconstructorV215:
         for r in p_el.findall(qn_w("r")):
             p_el.remove(r)
 
-        if not runs:
-            # Добавляем пустой run, чтобы параграф не был пустым
-            empty_run = etree.SubElement(p_el, qn_w("r"))
-            empty_run.set(qn_my("id"), f"{p_json.get('id')}.run_1")
-            etree.SubElement(empty_run, qn_w("t")).text = ""
-        else:
-            for run_idx, run_data in enumerate(runs, start=1):
-                new_run, self.next_drawing_id = self._build_run(run_data, p_json.get("id"), run_idx,
-                                                                self.next_drawing_id)
-                p_el.append(new_run)
+        for run_idx, run_data in enumerate(runs, start=1):
+            new_run, self.next_drawing_id = self._build_run(run_data, p_json.get("id"), run_idx,
+                                                            self.next_drawing_id)
+            p_el.append(new_run)
 
     def _process_table(self, tbl: etree._Element, tbl_json: Dict[str, Any]) -> None:
         """
@@ -558,7 +552,10 @@ class ReconstructorV215:
                 for pid, p_el, p_json in planned:
                     if p_json.get("type") != "paragraph":
                         raise ValueError(f"Cell content item '{pid}' must be paragraph")
-                    
+
+                    # Apply paragraph formatting for nested cell paragraph first.
+                    self._patch_pPr(p_el, p_json.get("p_format"))
+
                     # Rebuild runs for this paragraph
                     runs = p_json.get("runs", [])
                     for r in p_el.findall(qn_w("r")):
@@ -679,15 +676,28 @@ class ReconstructorV215:
                     new_elem = deepcopy(src_elem)
                     new_elem.set(qn_my("id"), item_id)
 
-                    # Remove all existing runs from the new paragraph
-                    for r in new_elem.findall(qn_w("r")):
-                        new_elem.remove(r)
+                    if new_elem.tag == qn_w("p"):
+                        # Paragraph path: rebuild runs from JSON
+                        for r in new_elem.findall(qn_w("r")):
+                            new_elem.remove(r)
 
-                    # Build new runs from JSON
-                    runs_data = item.get("runs", [])
-                    for run_idx, run_data in enumerate(runs_data, start=1):
-                        new_run, self.next_drawing_id = self._build_run(run_data, item_id, run_idx, self.next_drawing_id)
-                        new_elem.append(new_run)
+                        runs_data = item.get("runs", [])
+                        for run_idx, run_data in enumerate(runs_data, start=1):
+                            new_run, self.next_drawing_id = self._build_run(
+                                run_data,
+                                item_id,
+                                run_idx,
+                                self.next_drawing_id,
+                            )
+                            new_elem.append(new_run)
+                    elif new_elem.tag == qn_w("tbl"):
+                        # Table path: keep cloned table structure untouched here.
+                        # Table rows/cells/paragraphs are processed later in _process_table.
+                        pass
+                    else:
+                        raise ValueError(
+                            f"Unsupported root element tag for new element '{item_id}': {new_elem.tag}"
+                        )
 
                     # Add to indices
                     self.root_by_id[item_id] = new_elem
