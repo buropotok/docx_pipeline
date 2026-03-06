@@ -19,7 +19,6 @@ import shutil
 import reconstructor_table as rt
 from reconstructor_picture import add_picture_to_document
 
-print("reconstructor_table.py загружен!", flush=True)
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 MY_NS = "https://translatefactory/schema/custom-id"
 WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"  # for future use
@@ -286,7 +285,7 @@ class ReconstructorV215:
         # Находим существующий pPr
         pPr = p.find(qn_w("pPr"))
         if pPr is None:
-            return
+            pPr = etree.SubElement(p, qn_w("pPr"))
 
         # ========== ALIGNMENT (w:jc) ==========
         # Схема: alignmentEnum = ["left", "center", "right", "justify", "distribute"]
@@ -451,25 +450,19 @@ class ReconstructorV215:
         for r in p_el.findall(qn_w("r")):
             p_el.remove(r)
 
-        if not runs:
-            # Добавляем пустой run, чтобы параграф не был пустым
-            empty_run = etree.SubElement(p_el, qn_w("r"))
-            empty_run.set(qn_my("id"), f"{p_json.get('id')}.run_1")
-            etree.SubElement(empty_run, qn_w("t")).text = ""
-        else:
-            for run_idx, run_data in enumerate(runs, start=1):
-                new_run, self.next_drawing_id = self._build_run(run_data, p_json.get("id"), run_idx,
-                                                                self.next_drawing_id)
-                p_el.append(new_run)
+        for run_idx, run_data in enumerate(runs, start=1):
+            new_run, self.next_drawing_id = self._build_run(run_data, p_json.get("id"), run_idx,
+                                                            self.next_drawing_id)
+            p_el.append(new_run)
 
     def _process_table(self, tbl: etree._Element, tbl_json: Dict[str, Any]) -> None:
         """
-        Process a table: rebuild rows according to JSON order.
-        Does NOT modify tblPr or tcPr - only row order and cell content.
+        Process a table according to JSON order and patches.
+        Applies table-level updates (tblPr/tbl_grid), row/cell property patches
+        (trPr/tcPr), paragraph operations inside cells, and run rebuild for
+        cell paragraphs.
         """
 
-        print(f"\n _process_table для таблицы {tbl_json.get('id')}")
-        print(f"   JSON rows: {[row.get('id') for row in tbl_json.get('rows', [])]}")
 
         rows_json = tbl_json.get("rows", [])
 
@@ -539,10 +532,6 @@ class ReconstructorV215:
                 if not isinstance(paras_json, list):
                     raise ValueError(f"Row '{row_id}' cell[{ci}] content must be array")
 
-                print(f"\n ПЕРЕД ВЫЗОВОМ apply_cell_paragraph_ops:", flush=True)
-                print(f"   row_id: {row_id}", flush=True)
-                print(f"   cell_index: {ci}", flush=True)
-                print(f"   paras_json: {paras_json}", flush=True)
 
                 planned, final_paras = rt.apply_cell_paragraph_ops(
                     tc,
@@ -558,7 +547,10 @@ class ReconstructorV215:
                 for pid, p_el, p_json in planned:
                     if p_json.get("type") != "paragraph":
                         raise ValueError(f"Cell content item '{pid}' must be paragraph")
-                    
+
+                    # Apply paragraph formatting for nested cell paragraph first.
+                    self._patch_pPr(p_el, p_json.get("p_format"))
+
                     # Rebuild runs for this paragraph
                     runs = p_json.get("runs", [])
                     for r in p_el.findall(qn_w("r")):
@@ -579,8 +571,6 @@ class ReconstructorV215:
         Process all content items after deletions/insertions.
         Tables are processed first (they contain paragraphs), then root paragraphs.
         """
-        print(f"\n _process_content: начало обработки")
-        print(f"   content элементов в JSON: {len(self.content)}")
 
         tables_to_process = []
         paragraphs_to_process = []
@@ -610,6 +600,9 @@ class ReconstructorV215:
 
     def _is_new_id(self, elem_id: str) -> bool:
         """Check if element id indicates a newly created element (contains .digits at end)."""
+        # New elements are identified by suffix pattern ".N" (digits at end),
+        # e.g. p_1.1, tbl_2.3, tbl_1.row_4.1. This convention is used for
+        # root paragraphs, root tables, and table rows.
         return bool(self._new_id_pattern.search(str(elem_id)))
 
     def _apply_root_insertions_and_moves(self, body: etree._Element) -> None:
@@ -679,15 +672,28 @@ class ReconstructorV215:
                     new_elem = deepcopy(src_elem)
                     new_elem.set(qn_my("id"), item_id)
 
-                    # Remove all existing runs from the new paragraph
-                    for r in new_elem.findall(qn_w("r")):
-                        new_elem.remove(r)
+                    if new_elem.tag == qn_w("p"):
+                        # Paragraph path: rebuild runs from JSON
+                        for r in new_elem.findall(qn_w("r")):
+                            new_elem.remove(r)
 
-                    # Build new runs from JSON
-                    runs_data = item.get("runs", [])
-                    for run_idx, run_data in enumerate(runs_data, start=1):
-                        new_run, self.next_drawing_id = self._build_run(run_data, item_id, run_idx, self.next_drawing_id)
-                        new_elem.append(new_run)
+                        runs_data = item.get("runs", [])
+                        for run_idx, run_data in enumerate(runs_data, start=1):
+                            new_run, self.next_drawing_id = self._build_run(
+                                run_data,
+                                item_id,
+                                run_idx,
+                                self.next_drawing_id,
+                            )
+                            new_elem.append(new_run)
+                    elif new_elem.tag == qn_w("tbl"):
+                        # Table path: keep cloned table structure untouched here.
+                        # Table rows/cells/paragraphs are processed later in _process_table.
+                        pass
+                    else:
+                        raise ValueError(
+                            f"Unsupported root element tag for new element '{item_id}': {new_elem.tag}"
+                        )
 
                     # Add to indices
                     self.root_by_id[item_id] = new_elem
@@ -746,15 +752,11 @@ class ReconstructorV215:
             out_docx_path: path to output DOCX file
             donor_docx_path: path to donor DOCX file (with my:id attributes)
         """
-        print(f"\n build_docx: начало")
-        print(f"   out_docx_path: {out_docx_path}")
-        print(f"   donor_docx_path: {donor_docx_path}")
 
         # Create temporary directory for donor extraction
         self.temp_dir = tempfile.mkdtemp(prefix="reconstructor_")
         try:
             # Extract donor DOCX to temp directory
-            print(f"Extracting {donor_docx_path} to {self.temp_dir}")
             with zipfile.ZipFile(donor_docx_path, "r") as z:
                 z.extractall(self.temp_dir)
 
@@ -788,10 +790,7 @@ class ReconstructorV215:
             self._apply_root_insertions_and_moves(body)
 
             # Process content - tables first, then paragraphs
-            # This rebuilds rows in tables and paragraphs inside cells
-            # Does NOT modify tblPr/trPr/tcPr - only structure and runs
             self._process_content(body)
-            # TODO: Add picture handling later
 
             # Serialize document.xml (now with deletions) and add to package
             self.package_files["word/document.xml"] = etree.tostring(
@@ -802,85 +801,16 @@ class ReconstructorV215:
                 pretty_print=False
             )
 
-            # Сохраняем XML для отладки
-            debug_xml_path = os.path.join(self.temp_dir, "debug_document.xml")
-            with open(debug_xml_path, 'wb') as f:
-                f.write(self.package_files["word/document.xml"])
-            print(f"DEBUG: XML saved to {debug_xml_path}")
-
-            # Проверяем XML на валидность
-            try:
-                parser = etree.XMLParser()
-                etree.fromstring(self.package_files["word/document.xml"], parser=parser)
-                print("DEBUG: XML is valid")
-            except Exception as e:
-                print(f"DEBUG: XML is INVALID: {e}")
-                # Сохраняем первые 1000 символов для анализа
-                print(self.package_files["word/document.xml"][:1000].decode('utf-8', errors='ignore'))
-
             # Create output zip
             os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
             with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
                 for name in sorted(self.package_files.keys()):
                     zout.writestr(name, self.package_files[name])
 
-            # После создания zip, добавьте:
-            print("\n" + "=" * 50)
-            print("DIAGNOSTIC: ZIP file contents")
-            print("=" * 50)
-
-            with zipfile.ZipFile(out_docx_path, 'r') as zout_check:
-                files = zout_check.namelist()
-                print(f"Total files in ZIP: {len(files)}")
-
-                # Группируем файлы по папкам
-                word_files = [f for f in files if f.startswith("word/") and not f.startswith("word/media/")]
-                media_files = [f for f in files if f.startswith("word/media/")]
-                rels_files = [f for f in files if "_rels/" in f]
-                other_files = [f for f in files if not f.startswith("word/") and not "_rels/" in f]
-
-                print(f"\nword/ files: {len(word_files)}")
-                for f in sorted(word_files)[:10]:
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                print(f"\nword/media/ files: {len(media_files)}")
-                for f in sorted(media_files):
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                print(f"\n_rels/ files: {len(rels_files)}")
-                for f in sorted(rels_files):
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                print(f"\nOther files: {len(other_files)}")
-                for f in sorted(other_files):
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                # Проверяем критические файлы
-                print("\nCritical files check:")
-                critical = [
-                    "[Content_Types].xml",
-                    "word/document.xml",
-                    "word/_rels/document.xml.rels"
-                ]
-                for crit in critical:
-                    if crit in files:
-                        print(f"  + {crit} present")
-                    else:
-                        print(f"  - {crit} MISSING!")
-
-            print("=" * 50)
-
-            print(f"Reconstruction (step 2: root deletions) completed. Output: {out_docx_path}")
-
         finally:
             # Clean up temporary directory
             if self.temp_dir and os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir)
-                print(f"Cleaned up temporary directory: {self.temp_dir}")
 
     def _cleanup(self) -> None:
         """Clean up temporary directory if it exists."""
