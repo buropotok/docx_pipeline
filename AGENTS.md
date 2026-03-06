@@ -29,9 +29,9 @@ No visual optimization is allowed.
 
 ## 2. Core Architecture
 
-Pipeline:
+Pipeline (current operational path):
 
-    DOCX → Word SaveAs (materialize) → Parser → Effective Materializer → RAW JSON → Reconstructor → DOCX
+    DOCX → Word SaveAs (materialize) → add_custom_attrs(my:id) → Parser → Reconstructor → DOCX
 
 Key components:
 
@@ -53,9 +53,9 @@ Priority order:
 3. parser.py / reconstructor.py
 
 If a mismatch occurs:
-- Schema and Rules define expected behavior.
-- Code must be updated to match them.
-- Schema must NOT be reduced to match implementation gaps.
+- Contracts (schema + rules) must be synchronized with implemented behavior in parser/reconstructor.
+- Any alignment change MUST be versioned and documented across all four artifacts.
+- Silent divergence between code and contracts is not allowed.
 
 ---
 
@@ -134,8 +134,6 @@ No implicit inheritance between runs.
 
 Do NOT implement unless version is bumped:
 
-- Tables
-- Images
 - Shapes
 - Fields
 - Headers/Footers
@@ -147,8 +145,12 @@ Run types allowed by schema but NOT reconstructed:
 - softHyphen
 - noBreakHyphen
 
-Run type supported end-to-end (parse + reconstruct):
+Run types supported end-to-end (parse + reconstruct):
+- text
+- tab
+- break
 - cr
+- picture
 
 If implementing them:
 - bump Schema + Rules version
@@ -237,10 +239,9 @@ END OF AGENTS MANIFEST
 Official pipeline artifacts are stored in ./data for each donor:
 - donor.materialized.docx
 - donor.json
-- donor.effective.json
 - donor.reconstructed.docx
 
 Operational rules:
-- Recommended launch: `python -m tools.run_pipeline donor.docx`
-- Effective materializer fills holes only and MUST NOT overwrite parsed RAW values.
-- If reconstructor fails, first verify materialization/enrichment were executed and RAW still contains required fields (for example numbering mappings).
+- Recommended launch: `python -m tools.run_pipeline donor.docx` or `python tools/full_run_utility.py --run-id <id> --input-docx <path>`
+- `tools/materialize_effective.py` is deprecated and is not part of the current official pipeline.
+- If reconstructor fails, first verify that materialization and `my:id` enrichment were executed and RAW still contains required ids/mappings.
