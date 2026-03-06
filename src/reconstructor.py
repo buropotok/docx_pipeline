@@ -13,8 +13,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from lxml import etree
 import sys
 import re
-import tempfile
-import shutil
 
 import reconstructor_table as rt
 from reconstructor_picture import add_picture_to_document
@@ -36,7 +34,6 @@ def qn_my(local: str) -> str:
 class ReconstructorV215:
     def __init__(self, raw_json_path: str):
         self.raw_json_path = raw_json_path
-        self.donor_raw_dir: Optional[str] = None
         self.package_files: Dict[str, bytes] = {}
         self.next_drawing_id: int = 1
 
@@ -53,22 +50,20 @@ class ReconstructorV215:
 
         self._new_id_pattern = re.compile(r'\.\d+$')
 
-    def _copy_donor_files(self) -> None:
-        """Copy all donor files except word/document.xml into package_files."""
-        if not self.donor_raw_dir or not os.path.exists(self.donor_raw_dir):
-            raise FileNotFoundError(f"donor_raw_dir not found: {self.donor_raw_dir}")
+    def _copy_donor_files(self, donor_docx_path: str) -> bytes:
+        """Copy donor zip entries into package_files except word/document.xml; return donor document.xml bytes."""
+        with zipfile.ZipFile(donor_docx_path, "r") as z:
+            try:
+                donor_document_xml = z.read("word/document.xml")
+            except KeyError as exc:
+                raise FileNotFoundError(f"word/document.xml not found in {donor_docx_path}") from exc
 
-        exclude = {"word/document.xml"}
-        for root, _, files in os.walk(self.donor_raw_dir):
-            for fn in files:
-                src_path = os.path.join(root, fn)
-                rel_path = os.path.relpath(src_path, self.donor_raw_dir).replace("\\", "/")
-                if rel_path in exclude:
+            for name in z.namelist():
+                if name == "word/document.xml" or name.endswith("/"):
                     continue
-                if rel_path in self.package_files:
-                    continue
-                with open(src_path, "rb") as f:
-                    self.package_files[rel_path] = f.read()
+                self.package_files[name] = z.read(name)
+
+        return donor_document_xml
 
     def _build_indices(self, body: etree._Element) -> None:
         """
@@ -750,144 +745,50 @@ class ReconstructorV215:
         print(f"   out_docx_path: {out_docx_path}")
         print(f"   donor_docx_path: {donor_docx_path}")
 
-        # Create temporary directory for donor extraction
-        self.temp_dir = tempfile.mkdtemp(prefix="reconstructor_")
-        try:
-            # Extract donor DOCX to temp directory
-            print(f"Extracting {donor_docx_path} to {self.temp_dir}")
-            with zipfile.ZipFile(donor_docx_path, "r") as z:
-                z.extractall(self.temp_dir)
+        # Copy donor package as-is (except document.xml which will be replaced)
+        self.package_files = {}
+        donor_document_xml = self._copy_donor_files(donor_docx_path)
 
-            self.donor_raw_dir = self.temp_dir
+        parser = etree.XMLParser(remove_blank_text=False, recover=False, huge_tree=True)
+        doc_root = etree.fromstring(donor_document_xml, parser=parser)
+        body = doc_root.find(qn_w("body"))
+        if body is None:
+            raise ValueError("Document has no w:body")
 
-            # Copy all donor files except word/document.xml into package_files
-            self._copy_donor_files()
+        # Build indices (does not modify XML)
+        self._build_indices(body)
 
-            # Load donor document.xml
-            donor_doc_path = os.path.join(self.temp_dir, "word", "document.xml")
-            if not os.path.exists(donor_doc_path):
-                raise FileNotFoundError(f"word/document.xml not found in {donor_docx_path}")
+        # Apply root deletions (modifies body)
+        self._apply_root_deletions(body)
 
-            parser = etree.XMLParser(remove_blank_text=False, recover=False, huge_tree=True)
-            doc_tree = etree.parse(donor_doc_path, parser)
-            doc_root = doc_tree.getroot()
-            body = doc_root.find(qn_w("body"))
-            if body is None:
-                raise ValueError("Document has no w:body")
+        # Инициализируем next_drawing_id из существующих картинок
+        self.next_drawing_id = self._init_next_drawing_id(doc_root)
 
-            # Build indices (does not modify XML)
-            self._build_indices(body)
+        # Apply root insertions and moves (modifies body)
+        self._apply_root_insertions_and_moves(body)
 
-            # Apply root deletions (modifies body)
-            self._apply_root_deletions(body)
+        # Process content - tables first, then paragraphs
+        # This rebuilds rows in tables and paragraphs inside cells
+        # Does NOT modify tblPr/trPr/tcPr - only structure and runs
+        self._process_content(body)
 
-            # Инициализируем next_drawing_id из существующих картинок
-            self.next_drawing_id = self._init_next_drawing_id(doc_root)
+        # Serialize document.xml and replace only this part in package
+        self.package_files["word/document.xml"] = etree.tostring(
+            doc_root,
+            xml_declaration=True,
+            encoding="UTF-8",
+            standalone=None,
+            pretty_print=False,
+        )
 
-            # Apply root insertions and moves (modifies body)
-            self._apply_root_insertions_and_moves(body)
+        out_dir = os.path.dirname(out_docx_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+            for name in sorted(self.package_files.keys()):
+                zout.writestr(name, self.package_files[name])
 
-            # Process content - tables first, then paragraphs
-            # This rebuilds rows in tables and paragraphs inside cells
-            # Does NOT modify tblPr/trPr/tcPr - only structure and runs
-            self._process_content(body)
-            # TODO: Add picture handling later
-
-            # Serialize document.xml (now with deletions) and add to package
-            self.package_files["word/document.xml"] = etree.tostring(
-                doc_root,
-                xml_declaration=True,
-                encoding="UTF-8",
-                standalone=None,
-                pretty_print=False
-            )
-
-            # Сохраняем XML для отладки
-            debug_xml_path = os.path.join(self.temp_dir, "debug_document.xml")
-            with open(debug_xml_path, 'wb') as f:
-                f.write(self.package_files["word/document.xml"])
-            print(f"DEBUG: XML saved to {debug_xml_path}")
-
-            # Проверяем XML на валидность
-            try:
-                parser = etree.XMLParser()
-                etree.fromstring(self.package_files["word/document.xml"], parser=parser)
-                print("DEBUG: XML is valid")
-            except Exception as e:
-                print(f"DEBUG: XML is INVALID: {e}")
-                # Сохраняем первые 1000 символов для анализа
-                print(self.package_files["word/document.xml"][:1000].decode('utf-8', errors='ignore'))
-
-            # Create output zip
-            os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
-            with zipfile.ZipFile(out_docx_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
-                for name in sorted(self.package_files.keys()):
-                    zout.writestr(name, self.package_files[name])
-
-            # После создания zip, добавьте:
-            print("\n" + "=" * 50)
-            print("DIAGNOSTIC: ZIP file contents")
-            print("=" * 50)
-
-            with zipfile.ZipFile(out_docx_path, 'r') as zout_check:
-                files = zout_check.namelist()
-                print(f"Total files in ZIP: {len(files)}")
-
-                # Группируем файлы по папкам
-                word_files = [f for f in files if f.startswith("word/") and not f.startswith("word/media/")]
-                media_files = [f for f in files if f.startswith("word/media/")]
-                rels_files = [f for f in files if "_rels/" in f]
-                other_files = [f for f in files if not f.startswith("word/") and not "_rels/" in f]
-
-                print(f"\nword/ files: {len(word_files)}")
-                for f in sorted(word_files)[:10]:
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                print(f"\nword/media/ files: {len(media_files)}")
-                for f in sorted(media_files):
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                print(f"\n_rels/ files: {len(rels_files)}")
-                for f in sorted(rels_files):
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                print(f"\nOther files: {len(other_files)}")
-                for f in sorted(other_files):
-                    info = zout_check.getinfo(f)
-                    print(f"  - {f:30} {info.file_size:6} bytes")
-
-                # Проверяем критические файлы
-                print("\nCritical files check:")
-                critical = [
-                    "[Content_Types].xml",
-                    "word/document.xml",
-                    "word/_rels/document.xml.rels"
-                ]
-                for crit in critical:
-                    if crit in files:
-                        print(f"  + {crit} present")
-                    else:
-                        print(f"  - {crit} MISSING!")
-
-            print("=" * 50)
-
-            print(f"Reconstruction (step 2: root deletions) completed. Output: {out_docx_path}")
-
-        finally:
-            # Clean up temporary directory
-            if self.temp_dir and os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
-                print(f"Cleaned up temporary directory: {self.temp_dir}")
-
-    def _cleanup(self) -> None:
-        """Clean up temporary directory if it exists."""
-        if self.temp_dir and os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
-            self.temp_dir = None
-
+        print(f"Reconstruction completed. Output: {out_docx_path}")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Reconstructor v2.15 (step 2: root deletions)")
@@ -903,8 +804,6 @@ def main() -> None:
     except Exception:
         import traceback
         traceback.print_exc()
-        if hasattr(recon, '_cleanup'):
-            recon._cleanup()
         sys.exit(1)
 
 

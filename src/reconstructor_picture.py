@@ -26,7 +26,10 @@ def add_picture_to_document(
     # Проверяем обязательные поля
     relation_id = run_data.get("relation_id")
     if not relation_id:
-        raise ValueError("Picture run missing relation_id")
+        raise ValueError(
+            "Contract violation: picture run missing relation_id; "
+            "reconstruction without rels modification is impossible."
+        )
 
     extent = run_data.get("extent")
     if not isinstance(extent, dict):
