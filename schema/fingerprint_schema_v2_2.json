@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://translatefactory.local/schemas/fingerprint.schema.v2.2.json",
+  "title": "TranslateFactory Fingerprint Schema",
+  "description": "Структура fingerprint документа. Схема описывает итоговый fingerprint JSON, а правила split/merge и назначения id фиксируются в descriptions.",
+  "type": "object",
+  "required": [
+    "meta",
+    "fingerprint"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "source_schema_version",
+        "fingerprint_version",
+        "source_run_id_pattern"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source_schema_version": {
+          "type": "string",
+          "description": "Версия исходной donor/raw schema, по которой был получен donor.json"
+        },
+        "fingerprint_version": {
+          "type": "string",
+          "description": "Версия схемы fingerprint"
+        },
+        "source_run_id_pattern": {
+          "type": "string",
+          "description": "Паттерн реальных исходных run_id. Например: p_<paragraph>.run_<n>"
+        }
+      }
+    },
+    "fingerprint": {
+      "type": "array",
+      "description": "Полное покрытие всех абзацев donor.json, содержащих видимый текст, включая текстовые абзацы внутри таблиц.",
+      "items": {
+        "$ref": "#/$defs/fingerprintParagraph"
+      }
+    }
+  },
+  "$defs": {
+    "fingerprintParagraph": {
+      "type": "object",
+      "required": [
+        "paragraph_index",
+        "paragraph_id",
+        "segments"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "paragraph_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Индекс абзаца в порядке обхода donor.json среди абзацев с видимым текстом"
+        },
+        "paragraph_id": {
+          "type": "string",
+          "description": "ID исходного paragraph из donor.json"
+        },
+        "segments": {
+          "type": "array",
+          "description": "Упорядоченный список сегментов fingerprint для данного абзаца. Сегменты должны слева направо покрывать весь видимый текст абзаца, без перекрытий и потерь.",
+          "items": {
+            "$ref": "#/$defs/segment"
+          }
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "required": [
+        "id",
+        "class",
+        "role",
+        "text",
+        "sources",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$",
+          "description": "ID сегмента. Правила: (1) если исходный run не разделялся и не объединялся, id = исходный run_id; (2) если один исходный run разделён на несколько сегментов, id = <run_id>.<M>, где M = 1..N слева направо; (3) если несколько run объединены в один сегмент, id = <first_run_id>.1, где first_run_id — id первого run в объединённой последовательности; (4) если сначала был split, а затем merge, id всё равно якорится к первому исходному run, от которого начинается итоговый сегмент, а полная трассировка происхождения живёт в sources."
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "template_static",
+            "issuer_profile",
+            "document_dynamic",
+            "ambiguous"
+          ],
+          "description": "Класс сегмента по ABC-логике: template_static — универсальная часть формы; issuer_profile — данные учреждения/его представителей; document_dynamic — данные конкретного экземпляра; ambiguous — недостаточно данных для уверенной классификации. При конфликте приоритетов: document_dynamic > issuer_profile > template_static."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "field_label",
+            "field_value",
+            "heading",
+            "issuer_name",
+            "issuer_address",
+            "issuer_contact",
+            "issuer_requisite",
+            "person_name",
+            "person_id",
+            "date",
+            "registry_number",
+            "note_header",
+            "note_body",
+            "signature_label",
+            "signer_name",
+            "signer_position",
+            "seal_label",
+            "seal_text",
+            "other"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "description": "Финальный текст сегмента. Видимые пробелы внутри текста сохраняются. Регистр не нормализуется. Если поле логически присутствует, но значение отсутствует, допускается text = ''."
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Массив ссылок на исходные run'ы и диапазоны символов, из которых составлен сегмент. Для merge массив содержит несколько элементов в порядке склейки. Для split сумма покрытых диапазонов должна точно соответствовать text. Табы/пустые run'ы/переносы не должны использоваться как sources, если они не несут видимого текста.",
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Краткое обоснование классификации и/или сегментации"
+        }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "start",
+        "end"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "Реальный исходный run_id из donor.json, например p_6.run_1"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Начальная позиция в исходном тексте run, 0-based, включительно"
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Конечная позиция в исходном тексте run, не включая end"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1057 @@
+{
+  "meta": {
+    "source_schema_version": "2.15",
+    "fingerprint_version": "2.2",
+    "source_run_id_pattern": "p_<paragraph>.run_<n>"
+  },
+  "fingerprint": [
+    {
+      "paragraph_index": 0,
+      "paragraph_id": "p_1",
+      "segments": [
+        {
+          "id": "p_1.run_1",
+          "class": "template_static",
+          "role": "note_body",
+          "text": "Перевод с казахского языка на русский язык",
+          "sources": [
+            {
+              "run_id": "p_1.run_1",
+              "start": 0,
+              "end": 41
+            }
+          ],
+          "evidence": ["Текст перевода, не относящийся к конкретному экземпляру документа"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 1,
+      "paragraph_id": "p_4",
+      "segments": [
+        {
+          "id": "p_4.run_1",
+          "class": "issuer_profile",
+          "role": "issuer_name",
+          "text": "Филиал Некоммерческого акционерного общества «Государственная корпорация «Правительство для граждан» по городу ",
+          "sources": [
+            {
+              "run_id": "p_4.run_1",
+              "start": 0,
+              "end": 104
+            }
+          ],
+          "evidence": ["Название учреждения, не изменяется при смене экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 2,
+      "paragraph_id": "p_5",
+      "segments": [
+        {
+          "id": "p_5.run_1",
+          "class": "issuer_profile",
+          "role": "issuer_address",
+          "text": "Алматы 050008, город Алматы, проспект Абая, 111,",
+          "sources": [
+            {
+              "run_id": "p_5.run_1",
+              "start": 0,
+              "end": 47
+            }
+          ],
+          "evidence": ["Адрес учреждения, не изменяется при смене экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 3,
+      "paragraph_id": "p_6",
+      "segments": [
+        {
+          "id": "p_6.run_1.1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Тел.:",
+          "sources": [
+            {
+              "run_id": "p_6.run_1",
+              "start": 0,
+              "end": 5
+            }
+          ],
+          "evidence": ["Метка поля для телефонного номера"]
+        },
+        {
+          "id": "p_6.run_1.2",
+          "class": "issuer_profile",
+          "role": "issuer_contact",
+          "text": " 8 (727) 269 95 88 приемная,",
+          "sources": [
+            {
+              "run_id": "p_6.run_1",
+              "start": 5,
+              "end": 31
+            }
+          ],
+          "evidence": ["Контактный номер учреждения"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 4,
+      "paragraph_id": "p_7",
+      "segments": [
+        {
+          "id": "p_7.run_1.1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "e-mail:",
+          "sources": [
+            {
+              "run_id": "p_7.run_1",
+              "start": 0,
+              "end": 7
+            }
+          ],
+          "evidence": ["Метка поля для e-mail"]
+        },
+        {
+          "id": "p_7.run_1.2",
+          "class": "issuer_profile",
+          "role": "issuer_contact",
+          "text": " Almaty_kensenao@gov4c.kz",
+          "sources": [
+            {
+              "run_id": "p_7.run_1",
+              "start": 7,
+              "end": 32
+            }
+          ],
+          "evidence": ["Контактный e-mail учреждения"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 5,
+      "paragraph_id": "p_9",
+      "segments": [
+        {
+          "id": "p_9.run_1",
+          "class": "template_static",
+          "role": "note_header",
+          "text": "ПО МЕСТУ ТРЕБОВАНИЯ",
+          "sources": [
+            {
+              "run_id": "p_9.run_1",
+              "start": 0,
+              "end": 18
+            }
+          ],
+          "evidence": ["Универсальная метка для документа"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 6,
+      "paragraph_id": "p_11",
+      "segments": [
+        {
+          "id": "p_11.run_1",
+          "class": "template_static",
+          "role": "heading",
+          "text": "СПРАВКА О РОЖДЕНИИ № ",
+          "sources": [
+            {
+              "run_id": "p_11.run_1",
+              "start": 0,
+              "end": 20
+            }
+          ],
+          "evidence": ["Заголовок документа"]
+        },
+        {
+          "id": "p_11.run_2.1",
+          "class": "document_dynamic",
+          "role": "registry_number",
+          "text": "3891",
+          "sources": [
+            {
+              "run_id": "p_11.run_2",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Номер справки, изменяется для каждого экземпляра"]
+        },
+        {
+          "id": "p_11.run_2.2",
+          "class": "document_dynamic",
+          "role": "date",
+          "text": " от 04.11.2025 г.",
+          "sources": [
+            {
+              "run_id": "p_11.run_2",
+              "start": 4,
+              "end": 19
+            }
+          ],
+          "evidence": ["Дата выдачи справки, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 7,
+      "paragraph_id": "p_13",
+      "segments": [
+        {
+          "id": "p_13.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "ИИН ",
+          "sources": [
+            {
+              "run_id": "p_13.run_1",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Метка поля для ИИН"]
+        },
+        {
+          "id": "p_13.run_7",
+          "class": "document_dynamic",
+          "role": "person_id",
+          "text": "950831400120",
+          "sources": [
+            {
+              "run_id": "p_13.run_7",
+              "start": 0,
+              "end": 12
+            }
+          ],
+          "evidence": ["ИИН конкретного лица, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 8,
+      "paragraph_id": "p_15",
+      "segments": [
+        {
+          "id": "p_15.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Гражданин(-ка) ",
+          "sources": [
+            {
+              "run_id": "p_15.run_1",
+              "start": 0,
+              "end": 14
+            }
+          ],
+          "evidence": ["Метка поля для имени гражданина"]
+        },
+        {
+          "id": "p_15.run_5",
+          "class": "document_dynamic",
+          "role": "person_name",
+          "text": "САНГУЛОВА ДАНА ДАРХАНКЫЗЫ",
+          "sources": [
+            {
+              "run_id": "p_15.run_5",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "evidence": ["Имя гражданина, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 9,
+      "paragraph_id": "p_16",
+      "segments": [
+        {
+          "id": "p_16.run_1",
+          "class": "template_static",
+          "role": "note_body",
+          "text": "(фамилия, имя и отчество)",
+          "sources": [
+            {
+              "run_id": "p_16.run_1",
+              "start": 0,
+              "end": 26
+            }
+          ],
+          "evidence": ["Универсальная пояснительная надпись"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 10,
+      "paragraph_id": "p_17",
+      "segments": [
+        {
+          "id": "p_17.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "родился(-лась)",
+          "sources": [
+            {
+              "run_id": "p_17.run_1",
+              "start": 0,
+              "end": 13
+            }
+          ],
+          "evidence": ["Метка поля для даты рождения"]
+        },
+        {
+          "id": "p_17.run_5",
+          "class": "document_dynamic",
+          "role": "date",
+          "text": "31 числа 08 месяца 1995 года",
+          "sources": [
+            {
+              "run_id": "p_17.run_5",
+              "start": 0,
+              "end": 28
+            }
+          ],
+          "evidence": ["Дата рождения, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 11,
+      "paragraph_id": "p_19",
+      "segments": [
+        {
+          "id": "p_19.run_1",
+          "class": "template_static",
+          "role": "note_body",
+          "text": "о чем в книге регистрации актов о рождении",
+          "sources": [
+            {
+              "run_id": "p_19.run_1",
+              "start": 0,
+              "end": 42
+            }
+          ],
+          "evidence": ["Универсальная пояснительная надпись"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 12,
+      "paragraph_id": "p_20",
+      "segments": [
+        {
+          "id": "p_20.run_1",
+          "class": "document_dynamic",
+          "role": "date",
+          "text": "1995 года 11 месяца 14 числа",
+          "sources": [
+            {
+              "run_id": "p_20.run_1",
+              "start": 0,
+              "end": 28
+            }
+          ],
+          "evidence": ["Дата регистрации, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 13,
+      "paragraph_id": "p_21",
+      "segments": [
+        {
+          "id": "p_21.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "произведена запись за № ",
+          "sources": [
+            {
+              "run_id": "p_21.run_1",
+              "start": 0,
+              "end": 23
+            }
+          ],
+          "evidence": ["Метка поля для номера записи"]
+        },
+        {
+          "id": "p_21.run_2",
+          "class": "document_dynamic",
+          "role": "registry_number",
+          "text": "1059",
+          "sources": [
+            {
+              "run_id": "p_21.run_2",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Номер записи, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 14,
+      "paragraph_id": "p_23",
+      "segments": [
+        {
+          "id": "p_23.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Родители:",
+          "sources": [
+            {
+              "run_id": "p_23.run_1",
+              "start": 0,
+              "end": 9
+            }
+          ],
+          "evidence": ["Метка поля для родителей"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 15,
+      "paragraph_id": "p_24",
+      "segments": [
+        {
+          "id": "p_24.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Отец",
+          "sources": [
+            {
+              "run_id": "p_24.run_1",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Метка поля для отца"]
+        },
+        {
+          "id": "p_24.run_6",
+          "class": "document_dynamic",
+          "role": "person_name",
+          "text": "БОЛЫСБАЕВ ДАРХАН ДОСЖАНОВИЧ",
+          "sources": [
+            {
+              "run_id": "p_24.run_6",
+              "start": 0,
+              "end": 30
+            }
+          ],
+          "evidence": ["Имя отца, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 16,
+      "paragraph_id": "p_25",
+      "segments": [
+        {
+          "id": "p_25.run_1",
+          "class": "template_static",
+          "role": "note_body",
+          "text": "(фамилия, имя и отчество)",
+          "sources": [
+            {
+              "run_id": "p_25.run_1",
+              "start": 0,
+              "end": 26
+            }
+          ],
+          "evidence": ["Универсальная пояснительная надпись"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 17,
+      "paragraph_id": "p_26",
+      "segments": [
+        {
+          "id": "p_26.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Национальность",
+          "sources": [
+            {
+              "run_id": "p_26.run_1",
+              "start": 0,
+              "end": 13
+            }
+          ],
+          "evidence": ["Метка поля для национальности"]
+        },
+        {
+          "id": "p_26.run_6",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": "казах",
+          "sources": [
+            {
+              "run_id": "p_26.run_6",
+              "start": 0,
+              "end": 5
+            }
+          ],
+          "evidence": ["Национальность отца, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 18,
+      "paragraph_id": "p_27",
+      "segments": [
+        {
+          "id": "p_27.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Гражданство",
+          "sources": [
+            {
+              "run_id": "p_27.run_1",
+              "start": 0,
+              "end": 11
+            }
+          ],
+          "evidence": ["Метка поля для гражданства"]
+        },
+        {
+          "id": "p_27.run_6",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": " ",
+          "sources": [
+            {
+              "run_id": "p_27.run_6",
+              "start": 0,
+              "end": 1
+            }
+          ],
+          "evidence": ["Пустое значение для гражданства, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 19,
+      "paragraph_id": "p_29",
+      "segments": [
+        {
+          "id": "p_29.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Мать",
+          "sources": [
+            {
+              "run_id": "p_29.run_1",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Метка поля для матери"]
+        },
+        {
+          "id": "p_29.run_6",
+          "class": "document_dynamic",
+          "role": "person_name",
+          "text": "САНГУЛОВА ГАУХАР КУДАЙБЕРДЫЕВНА",
+          "sources": [
+            {
+              "run_id": "p_29.run_6",
+              "start": 0,
+              "end": 32
+            }
+          ],
+          "evidence": ["Имя матери, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 20,
+      "paragraph_id": "p_30",
+      "segments": [
+        {
+          "id": "p_30.run_1",
+          "class": "template_static",
+          "role": "note_body",
+          "text": "(фамилия, имя и отчество)",
+          "sources": [
+            {
+              "run_id": "p_30.run_1",
+              "start": 0,
+              "end": 26
+            }
+          ],
+          "evidence": ["Универсальная пояснительная надпись"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 21,
+      "paragraph_id": "p_31",
+      "segments": [
+        {
+          "id": "p_31.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Национальность",
+          "sources": [
+            {
+              "run_id": "p_31.run_1",
+              "start": 0,
+              "end": 13
+            }
+          ],
+          "evidence": ["Метка поля для национальности"]
+        },
+        {
+          "id": "p_31.run_6",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": "казаШКА",
+          "sources": [
+            {
+              "run_id": "p_31.run_6",
+              "start": 0,
+              "end": 7
+            }
+          ],
+          "evidence": ["Национальность матери, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 22,
+      "paragraph_id": "p_32",
+      "segments": [
+        {
+          "id": "p_32.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Гражданство",
+          "sources": [
+            {
+              "run_id": "p_32.run_1",
+              "start": 0,
+              "end": 11
+            }
+          ],
+          "evidence": ["Метка поля для гражданства"]
+        },
+        {
+          "id": "p_32.run_6",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": " ",
+          "sources": [
+            {
+              "run_id": "p_32.run_6",
+              "start": 0,
+              "end": 1
+            }
+          ],
+          "evidence": ["Пустое значение для гражданства, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 23,
+      "paragraph_id": "p_34",
+      "segments": [
+        {
+          "id": "p_34.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Место рождения",
+          "sources": [
+            {
+              "run_id": "p_34.run_1",
+              "start": 0,
+              "end": 13
+            }
+          ],
+          "evidence": ["Метка поля для места рождения"]
+        },
+        {
+          "id": "p_34.run_3",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": "Город (селение): АЛМАТЫ Республика: КАЗАХСТАН",
+          "sources": [
+            {
+              "run_id": "p_34.run_3",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "evidence": ["Место рождения, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 24,
+      "paragraph_id": "p_36",
+      "segments": [
+        {
+          "id": "p_36.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Выдано свидетельство о рождении:",
+          "sources": [
+            {
+              "run_id": "p_36.run_1",
+              "start": 0,
+              "end": 32
+            }
+          ],
+          "evidence": ["Метка поля для даты выдачи свидетельства"]
+        },
+        {
+          "id": "p_36.run_3",
+          "class": "document_dynamic",
+          "role": "date",
+          "text": "04 числа 04 месяца 2012 года",
+          "sources": [
+            {
+              "run_id": "p_36.run_3",
+              "start": 0,
+              "end": 28
+            }
+          ],
+          "evidence": ["Дата выдачи свидетельства, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 25,
+      "paragraph_id": "p_38",
+      "segments": [
+        {
+          "id": "p_38.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Место государственной регистрации ",
+          "sources": [
+            {
+              "run_id": "p_38.run_1",
+              "start": 0,
+              "end": 31
+            }
+          ],
+          "evidence": ["Метка поля для места государственной регистрации"]
+        },
+        {
+          "id": "p_38.run_2",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": "Жетысуский районный отдел по РАГС филиала НАО «ГК «Правительство для граждан» по городу Алматы",
+          "sources": [
+            {
+              "run_id": "p_38.run_2",
+              "start": 0,
+              "end": 95
+            }
+          ],
+          "evidence": ["Место государственной регистрации, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 26,
+      "paragraph_id": "p_40",
+      "segments": [
+        {
+          "id": "p_40.run_1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Место выдачи ",
+          "sources": [
+            {
+              "run_id": "p_40.run_1",
+              "start": 0,
+              "end": 12
+            }
+          ],
+          "evidence": ["Метка поля для места выдачи"]
+        },
+        {
+          "id": "p_40.run_2",
+          "class": "document_dynamic",
+          "role": "field_value",
+          "text": "Ауэзовский районный отдел по РАГС филиала НАО «ГК «Правительство для граждан» по городу Алматы ",
+          "sources": [
+            {
+              "run_id": "p_40.run_2",
+              "start": 0,
+              "end": 95
+            }
+          ],
+          "evidence": ["Место выдачи, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 27,
+      "paragraph_id": "p_42",
+      "segments": [
+        {
+          "id": "p_42.run_1",
+          "class": "template_static",
+          "role": "note_header",
+          "text": "Примечание* Основание внесения изменения, дополнения, исправления в актовую запись, выдачи повторного свидетельства о рождении:",
+          "sources": [
+            {
+              "run_id": "p_42.run_1",
+              "start": 0,
+              "end": 122
+            }
+          ],
+          "evidence": ["Заголовок примечания"]
+        },
+        {
+          "id": "p_42.run_2",
+          "class": "document_dynamic",
+          "role": "note_body",
+          "text": " На основании акт.записи о разводе №384 от 21.09.2005 г. изменена фамилия матери с «Болысбаева» на «Сангулова».",
+          "sources": [
+            {
+              "run_id": "p_42.run_2",
+              "start": 0,
+              "end": 116
+            }
+          ],
+          "evidence": ["Текст примечания, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 28,
+      "paragraph_id": "p_43",
+      "segments": [
+        {
+          "id": "p_43.run_1",
+          "class": "document_dynamic",
+          "role": "note_body",
+          "text": "На основании акт. записи о перемене ФИО №48 от 22.02.2012 г. изменена фамилия ребенка с «Болысбаева » на «Сангулова»,",
+          "sources": [
+            {
+              "run_id": "p_43.run_1",
+              "start": 0,
+              "end": 122
+            }
+          ],
+          "evidence": ["Текст примечания, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 29,
+      "paragraph_id": "p_44",
+      "segments": [
+        {
+          "id": "p_44.run_1",
+          "class": "document_dynamic",
+          "role": "note_body",
+          "text": "выдано повторное св-во №2163323 от 04.04.2012 г .",
+          "sources": [
+            {
+              "run_id": "p_44.run_1",
+              "start": 0,
+              "end": 52
+            }
+          ],
+          "evidence": ["Текст примечания, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 30,
+      "paragraph_id": "p_46",
+      "segments": [
+        {
+          "id": "p_46.run_1",
+          "class": "template_static",
+          "role": "signature_label",
+          "text": "И.о. руководителя регистрирующего органа",
+          "sources": [
+            {
+              "run_id": "p_46.run_1",
+              "start": 0,
+              "end": 37
+            }
+          ],
+          "evidence": ["Метка для подписи"]
+        },
+        {
+          "id": "p_46.run_3",
+          "class": "document_dynamic",
+          "role": "signer_name",
+          "text": "СЕПЕТОВА С.О.",
+          "sources": [
+            {
+              "run_id": "p_46.run_3",
+              "start": 0,
+              "end": 12
+            }
+          ],
+          "evidence": ["Имя подписанта, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 31,
+      "paragraph_id": "p_47",
+      "segments": [
+        {
+          "id": "p_47.run_3",
+          "class": "template_static",
+          "role": "signature_label",
+          "text": "/подпись/",
+          "sources": [
+            {
+              "run_id": "p_47.run_3",
+              "start": 0,
+              "end": 8
+            }
+          ],
+          "evidence": ["Универсальная метка для подписи"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 32,
+      "paragraph_id": "p_48",
+      "segments": [
+        {
+          "id": "p_48.run_6",
+          "class": "template_static",
+          "role": "signature_label",
+          "text": "   подпись",
+          "sources": [
+            {
+              "run_id": "p_48.run_6",
+              "start": 0,
+              "end": 9
+            }
+          ],
+          "evidence": ["Универсальная метка для подписи"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 33,
+      "paragraph_id": "p_49",
+      "segments": [
+        {
+          "id": "p_49.run_1",
+          "class": "template_static",
+          "role": "seal_label",
+          "text": "М.П.",
+          "sources": [
+            {
+              "run_id": "p_49.run_1",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Универсальная метка для печати"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 34,
+      "paragraph_id": "p_51",
+      "segments": [
+        {
+          "id": "p_51.run_1",
+          "class": "template_static",
+          "role": "seal_label",
+          "text": "Гербовая печать:",
+          "sources": [
+            {
+              "run_id": "p_51.run_1",
+              "start": 0,
+              "end": 15
+            }
+          ],
+          "evidence": ["Метка для гербовой печати"]
+        },
+        {
+          "id": "p_51.run_3",
+          "class": "issuer_profile",
+          "role": "seal_text",
+          "text": "/Филиал Некоммерческого акционерного общества «Государственная корпорация «Правительство для граждан» по городу Алматы * Отдел регистрации актов гражданского состояния * БИН 180541001958/",
+          "sources": [
+            {
+              "run_id": "p_51.run_3",
+              "start": 0,
+              "end": 155
+            }
+          ],
+          "evidence": ["Текст гербовой печати, не изменяется при смене экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 35,
+      "paragraph_id": "p_54",
+      "segments": [
+        {
+          "id": "p_54.run_1",
+          "class": "document_dynamic",
+          "role": "other",
+          "text": "Исп: Уласбек И.",
+          "sources": [
+            {
+              "run_id": "p_54.run_1",
+              "start": 0,
+              "end": 15
+            }
+          ],
+          "evidence": ["Исполнитель документа, изменяется для каждого экземпляра"]
+        }
+      ]
+    },
+    {
+      "paragraph_index": 36,
+      "paragraph_id": "p_55",
+      "segments": [
+        {
+          "id": "p_55.run_1.1",
+          "class": "template_static",
+          "role": "field_label",
+          "text": "Тел:",
+          "sources": [
+            {
+              "run_id": "p_55.run_1",
+              "start": 0,
+              "end": 4
+            }
+          ],
+          "evidence": ["Метка поля для телефонного номера"]
+        },
+        {
+          "id": "p_55.run_1.2",
+          "class": "issuer_profile",
+          "role": "issuer_contact",
+          "text": " 8 (727) 2580202 внут: 34088",
+          "sources": [
+            {
+              "run_id": "p_55.run_1",
+              "start": 4,
+              "end": 31
+            }
+          ],
+          "evidence": ["Контактный номер учреждения"]
+        }
+      ]
+    }
+  ]
+}
