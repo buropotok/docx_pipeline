@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://translatefactory/schema/raw/2.15",
-  "title": "Standard RAW JSON Schema v2.15 (Word styles imported + run overrides + tables with full properties)",
-  "version": "2.15",
+  "$id": "https://translatefactory/schema/raw/2.16",
+  "title": "Standard RAW JSON Schema v2.16 (aligned with parser v43 / reconstructor v2.15)",
+  "version": "2.16",
   "type": "object",
   "required": [
     "meta",
@@ -786,11 +786,7 @@
         "leader": {
           "type": "string"
         }
-      },
-      "required": [
-        "posTwip",
-        "val"
-      ]
+      }
     },
     "textAlignmentEnum": {
       "type": "string",
