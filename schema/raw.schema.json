@@ -619,6 +619,11 @@
         }
       ]
     },
+    "shapeContentItem": {
+      "oneOf": [
+        { "$ref": "#/$defs/paragraph" }
+      ]
+    },
     "shapeExtent": {
       "type": "object",
       "additionalProperties": false,
@@ -719,10 +724,23 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "relativeFrom": {
+        "layout": {
           "type": "string",
-          "enum": ["page", "column", "character", "margin"],
-          "description": "Относительно чего позиционируется фигура"
+          "enum": [
+            "inline",
+            "anchor"
+          ],
+          "description": "Тип размещения фигуры: inline или floating(anchor)"
+        },
+        "relativeFromH": {
+          "type": "string",
+          "enum": ["page", "margin", "column", "character", "leftMargin", "rightMargin", "insideMargin", "outsideMargin"],
+          "description": "Горизонтальная система координат"
+        },
+        "relativeFromV": {
+          "type": "string",
+          "enum": ["page", "margin", "paragraph", "line", "topMargin", "bottomMargin", "insideMargin", "outsideMargin"],
+          "description": "Вертикальная система координат"
         },
         "horizontalPos": {
           "type": "integer",
@@ -732,9 +750,42 @@
           "type": "integer",
           "description": "Вертикальное смещение в EMU"
         },
+        "wrap": {
+          "type": "string",
+          "enum": [
+            "none",
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "behindText",
+            "inFrontOfText"
+          ],
+          "description": "Режим обтекания текста вокруг фигуры"
+        },
+        "distL": {
+          "type": "integer",
+          "description": "Отступ обтекания слева в EMU"
+        },
+        "distR": {
+          "type": "integer",
+          "description": "Отступ обтекания справа в EMU"
+        },
+        "distT": {
+          "type": "integer",
+          "description": "Отступ обтекания сверху в EMU"
+        },
+        "distB": {
+          "type": "integer",
+          "description": "Отступ обтекания снизу в EMU"
+        },
         "allowOverlap": {
           "type": "boolean",
           "description": "Разрешить перекрытие"
+        },
+        "behindDoc": {
+          "type": "boolean",
+          "description": "Фигура находится за текстом"
         }
       }
     },
@@ -764,7 +815,14 @@
         },
         "text": {
           "$ref": "#/$defs/shapeText",
-          "description": "Текстовое содержимое фигуры"
+          "description": "Legacy-плоский текст фигуры. В новых данных предпочтительно использовать content."
+        },
+        "content": {
+          "type": "array",
+          "description": "Структурированное содержимое фигуры/textbox: массив абзацев.",
+          "items": {
+            "$ref": "#/$defs/shapeContentItem"
+          }
         },
         "positioning": {
           "$ref": "#/$defs/shapePositioning",

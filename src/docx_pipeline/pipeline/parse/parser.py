@@ -16,7 +16,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from lxml import etree
 import sys
-sys.path.insert(0, os.path.dirname(__file__))
+from pathlib import Path
+
+SRC_ROOT = Path(__file__).resolve().parents[3]
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
 from docx_pipeline.pipeline.parse.parser_picture import parse_picture_node
 from docx_pipeline.pipeline.parse.parser_table import parse_table_node
 from docx_pipeline.pipeline.parse.parser_shape import parse_shape_node

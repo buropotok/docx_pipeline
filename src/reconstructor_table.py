@@ -13,9 +13,9 @@
 
 from __future__ import annotations
 
-print("=" * 50)
-print("reconstructor_table.py ЗАГРУЖЕН!!!")
-print("=" * 50)
+# print("=" * 50)
+# print("reconstructor_table.py ЗАГРУЖЕН!!!")
+# print("=" * 50)
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Callable
@@ -453,22 +453,22 @@ def apply_cell_paragraph_ops(
       - final_paragraph_elements: ordered list of paragraph elements to set into cell
     """
 
-    print(f"\n apply_cell_paragraph_ops для ячейки {row_id}.cell_{cell_index_1based}", flush=True)
-    print(f"   json_paragraphs получен: {json_paragraphs}", flush=True)
-    print(f"   тип json_paragraphs: {type(json_paragraphs)}", flush=True)
-    print(f"   длина json_paragraphs: {len(json_paragraphs)}", flush=True)
+    # print(f"\n apply_cell_paragraph_ops для ячейки {row_id}.cell_{cell_index_1based}", flush=True)
+    # print(f"   json_paragraphs получен: {json_paragraphs}", flush=True)
+    # print(f"   тип json_paragraphs: {type(json_paragraphs)}", flush=True)
+    # print(f"   длина json_paragraphs: {len(json_paragraphs)}", flush=True)
 
     idx = index_cell_paragraphs(tc, row_id, cell_index_1based)
 
-    print(f"   Оригинальные параграфы в ячейке: {list(idx.el_by_id.keys())}")
-    print(f"   JSON параграфов: {[p.get('id') for p in json_paragraphs]}")
-    for pj in json_paragraphs:
-        pid = pj.get('id')
-        print(f"   Проверка {pid}: is_new_id = {is_new_id(str(pid))}", flush=True)
-        if pid == 'tbl_1.row_1.cell_1.p_5':
-            print(f"    НАЙДЕН P_5 в JSON: {pj}")
-            print(f"      derive_from: {pj.get('derive_from')}")
-            print(f"      runs: {pj.get('runs', [])}")
+    # print(f"   Оригинальные параграфы в ячейке: {list(idx.el_by_id.keys())}")
+    # print(f"   JSON параграфов: {[p.get('id') for p in json_paragraphs]}")
+    # for pj in json_paragraphs:
+    #     pid = pj.get('id')
+        # print(f"   Проверка {pid}: is_new_id = {is_new_id(str(pid))}", flush=True)
+        # if pid == 'tbl_1.row_1.cell_1.p_5':
+        #     print(f"    НАЙДЕН P_5 в JSON: {pj}")
+        #     print(f"      derive_from: {pj.get('derive_from')}")
+        #     print(f"      runs: {pj.get('runs', [])}")
 
     working: List[etree._Element] = list(idx.paras_in_order)
 

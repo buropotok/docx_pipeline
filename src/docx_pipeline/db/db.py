@@ -10,7 +10,7 @@ def get_connection() -> sqlite3.Connection:
     settings = get_settings()
     settings.db_path.parent.mkdir(parents=True, exist_ok=True)
     # print(f"DB PATH = {settings.db_path}")
-    conn = sqlite3.connect(settings.db_path)
+    conn = sqlite3.connect(settings.db_path, timeout=30)
     # print(conn.execute("PRAGMA database_list;").fetchall())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")

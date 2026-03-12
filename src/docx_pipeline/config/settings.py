@@ -14,7 +14,7 @@ class Settings:
 
 
 def get_settings() -> Settings:
-    project_root = Path(r"C:\Users\sokol\PycharmProjects\Buropotok")
+    project_root = Path(r"C:\Users\sokol\PycharmProjects\Buropotok\docx_pipeline")
     home_path = Path(r"E:\Buro_potok")
 
     return Settings(

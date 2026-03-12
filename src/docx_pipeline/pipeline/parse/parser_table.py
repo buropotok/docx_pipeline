@@ -162,6 +162,40 @@ def _parse_tbl_look(el: Optional[etree._Element]) -> Optional[Dict[str, Any]]:
     return result if result else None
 
 
+def _parse_tblp_pr(el: Optional[etree._Element]) -> Optional[Dict[str, Any]]:
+    """Парсит w:tblpPr (плавающая таблица / позиционирование таблицы)."""
+    if el is None:
+        return None
+
+    result: Dict[str, Any] = {}
+
+    # Отступы обтекания вокруг таблицы
+    for attr in ("leftFromText", "rightFromText", "topFromText", "bottomFromText"):
+        value = _int_attr(el, attr)
+        if value is not None:
+            result[attr] = value
+
+    # Якоря позиционирования
+    for attr in ("vertAnchor", "horzAnchor"):
+        value = _str_attr(el, attr)
+        if value:
+            result[attr] = value
+
+    # Абсолютные координаты
+    for attr in ("tblpX", "tblpY"):
+        value = _int_attr(el, attr)
+        if value is not None:
+            result[attr] = value
+
+    # Специальное позиционирование / выравнивание
+    for attr in ("tblpXSpec", "tblpYSpec"):
+        value = _str_attr(el, attr)
+        if value:
+            result[attr] = value
+
+    return result if result else None
+
+
 def _parse_tbl_pr(tbl: etree._Element) -> Dict[str, Any]:
     """Парсит свойства таблицы (w:tblPr)."""
     tblPr = tbl.find(qn("w:tblPr"))
@@ -177,7 +211,11 @@ def _parse_tbl_pr(tbl: etree._Element) -> Dict[str, Any]:
         if style:
             result["tblStyle"] = style
 
-    # tblpPr (плавающие таблицы) – можно добавить позже, пока игнорируем
+    # tblpPr (плавающие таблицы / позиционирование)
+    tblpPr_el = tblPr.find(qn("w:tblpPr"))
+    tblpPr = _parse_tblp_pr(tblpPr_el)
+    if tblpPr:
+        result["tblpPr"] = tblpPr
 
     # tblOverlap
     overlap_el = tblPr.find(qn("w:tblOverlap"))
@@ -299,8 +337,10 @@ def _parse_tc_pr(tc: etree._Element) -> Dict[str, Any]:
     # vMerge
     vMerge_el = tcPr.find(qn("w:vMerge"))
     if vMerge_el is not None:
-        # Согласно OOXML, элемент <w:vMerge> без атрибута означает restart
-        val = _str_attr(vMerge_el, "val") or "restart"
+        val = _str_attr(vMerge_el, "val")
+        if val is None:
+            val = "continue"  # отсутствие атрибута = continue
+        # при желании можно добавить проверку допустимых значений ("restart", "continue")
         result["vMerge"] = val
 
     # tcBorders
