@@ -306,6 +306,12 @@ class ReconstructorV215:
             pPr = etree.Element(qn_w("pPr"))
             p.insert(0, pPr)
 
+        def _get_or_create_ppr_child(local_name: str) -> etree._Element:
+            child = pPr.find(qn_w(local_name))
+            if child is None:
+                child = etree.SubElement(pPr, qn_w(local_name))
+            return child
+
         # ========== ALIGNMENT (w:jc) ==========
         # Схема: alignmentEnum = ["left", "center", "right", "justify", "distribute"]
         # OOXML: left, center, right, both, distribute
@@ -316,18 +322,16 @@ class ReconstructorV215:
                 val = "both"
             # Остальные значения оставляем как есть (left, center, right, distribute)
 
-            jc = pPr.find(qn_w("jc"))
-            if jc is not None:
-                jc.set(qn_w("val"), val)
+            jc = _get_or_create_ppr_child("jc")
+            jc.set(qn_w("val"), val)
 
         # ========== TEXT ALIGNMENT (w:textAlignment) ==========
         # Схема: textAlignmentEnum = ["auto", "baseline", "top", "center", "bottom"]
         # OOXML: auto, baseline, top, center, bottom (полное совпадение)
         if "text_alignment" in p_format and p_format["text_alignment"] is not None:
             val = str(p_format["text_alignment"])
-            ta = pPr.find(qn_w("textAlignment"))
-            if ta is not None:
-                ta.set(qn_w("val"), val)
+            ta = _get_or_create_ppr_child("textAlignment")
+            ta.set(qn_w("val"), val)
 
         # ========== INDENTS (w:ind) ==========
         # Для обычных абзацев пересобираем w:ind заново, чтобы не смешивать
