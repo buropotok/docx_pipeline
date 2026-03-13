@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "donor.qa.ai.response.schema.json",
+  "title": "Donor QA AI Response",
+  "description": "Схема JSON-ответа AI для анализа layout-аудита исходного и оптимизированного документа.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "score",
+    "confidence",
+    "decision",
+    "summary",
+    "issues",
+    "metrics"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Технический статус ответа AI.",
+      "enum": [
+        "ok",
+        "warning",
+        "fail"
+      ]
+    },
+    "score": {
+      "type": "number",
+      "description": "Итоговая числовая оценка качества соответствия optimized-документа исходному. Рекомендуемый диапазон: 0.0–1.0.",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Уверенность AI в собственной оценке. Рекомендуемый диапазон: 0.0–1.0.",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "decision": {
+      "type": "string",
+      "description": "Рекомендуемое итоговое решение для QA-пайплайна.",
+      "enum": [
+        "optimized_check",
+        "optimized_warning",
+        "optimized_fail"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Краткое человекочитаемое резюме по документу."
+    },
+    "issues": {
+      "type": "array",
+      "description": "Список выявленных проблем или отклонений.",
+      "items": {
+        "$ref": "#/$defs/issue"
+      }
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "notes": {
+      "type": "array",
+      "description": "Необязательные дополнительные замечания AI.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "severity",
+        "details"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Тип проблемы.",
+          "enum": [
+            "page_count_changed",
+            "paragraph_count_changed",
+            "table_count_changed",
+            "paragraph_shift",
+            "paragraph_height_delta",
+            "table_shift",
+            "table_height_delta",
+            "floating_table_neighborhood_drift",
+            "local_table_block_drift",
+            "suspicious_downstream_shift",
+            "acceptable_stress_noise",
+            "layout_preserved",
+            "other"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "description": "Серьезность проблемы.",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "fatal"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "details": {
+          "type": "string",
+          "description": "Краткое описание проблемы."
+        },
+        "delta_pt": {
+          "type": "number",
+          "description": "Отклонение в пунктах Word (pt), если применимо."
+        },
+        "before_value": {
+          "description": "Значение до оптимизации, если применимо."
+        },
+        "after_value": {
+          "description": "Значение после оптимизации, если применимо."
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "description": "Локализация проблемы в документе.",
+      "additionalProperties": false,
+      "properties": {
+        "paragraph_index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Индекс абзаца в audit JSON."
+        },
+        "table_index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Индекс таблицы в audit JSON."
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Номер страницы."
+        },
+        "range_start_paragraph_index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Начало диапазона абзацев, если проблема относится к блоку."
+        },
+        "range_end_paragraph_index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Конец диапазона абзацев, если проблема относится к блоку."
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page_count_changed",
+        "paragraph_count_changed",
+        "table_count_changed",
+        "max_paragraph_top_delta_pt",
+        "max_paragraph_height_delta_pt",
+        "max_table_top_delta_pt",
+        "max_table_height_delta_pt"
+      ],
+      "properties": {
+        "page_count_changed": {
+          "type": "boolean",
+          "description": "Изменилось ли количество страниц."
+        },
+        "paragraph_count_changed": {
+          "type": "boolean",
+          "description": "Изменилось ли количество абзацев."
+        },
+        "table_count_changed": {
+          "type": "boolean",
+          "description": "Изменилось ли количество таблиц."
+        },
+        "max_paragraph_top_delta_pt": {
+          "type": "number",
+          "description": "Максимальное отклонение top_pt у абзацев."
+        },
+        "max_paragraph_height_delta_pt": {
+          "type": "number",
+          "description": "Максимальное отклонение высоты у абзацев."
+        },
+        "max_table_top_delta_pt": {
+          "type": "number",
+          "description": "Максимальное отклонение top_pt у таблиц."
+        },
+        "max_table_height_delta_pt": {
+          "type": "number",
+          "description": "Максимальное отклонение высоты у таблиц."
+        },
+        "floating_table_metrics_reliable": {
+          "type": "boolean",
+          "description": "Удалось ли надежно интерпретировать метрики плавающих таблиц."
+        },
+        "overall_geometry_preserved": {
+          "type": "boolean",
+          "description": "Считает ли AI, что геометрия документа в целом сохранена."
+        }
+      }
+    }
+  }
+}

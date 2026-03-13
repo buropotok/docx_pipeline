@@ -697,6 +697,8 @@ def optimize_paragraph(paragraph: Dict[str, Any], doc_defaults: Dict[str, Any], 
     forced_leading_tab_pos: Optional[int] = None
     force_inline_spacer_mode = bool(context.get("force_inline_spacer_mode"))
     drop_leading_spaces = False
+    if context.get("in_table"):
+        force_inline_spacer_mode = True
 
     # (остальная логика без изменений)
     if first_line_marker_original < 0 and first_anchor is not None:
@@ -728,9 +730,11 @@ def optimize_paragraph(paragraph: Dict[str, Any], doc_defaults: Dict[str, Any], 
     out_units: List[Unit] = []
     added_tabs: List[Tuple[int, str]] = []
     if forced_leading_tab_pos is not None:
-        out_units.append(Unit(kind="tab", source_run=units[0].source_run, width_twips=0.0, tab_val="left", tab_pos_twip=forced_leading_tab_pos))
-        added_tabs.append((forced_leading_tab_pos, "left"))
-
+        if force_inline_spacer_mode:
+            out_units.append(make_inline_spacer_unit(units[0].source_run, float(forced_leading_tab_pos), doc_defaults, resolver, paragraph_style_r))
+        else:
+            out_units.append(Unit(kind="tab", source_run=units[0].source_run, width_twips=0.0, tab_val="left", tab_pos_twip=forced_leading_tab_pos))
+            added_tabs.append((forced_leading_tab_pos, "left"))
     i = 0
 
     while i < len(units):
