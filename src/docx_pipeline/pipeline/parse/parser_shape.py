@@ -1,6 +1,7 @@
 
 from lxml import etree
 import re
+from docx_pipeline.pipeline.parse.parser_media_classifier import classify_media_node
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -385,15 +386,8 @@ def parse_shape_node(node, run_id, parser):
     Parse shape from w:drawing or w:pict.
     Return None for picture-only payloads so parser_picture fallback can handle them.
     """
-    # VML image without textbox -> not a shape, let picture parser handle it
-    if _has_vml_imagedata(node) and not _has_vml_textbox(node):
-        return None
-
-    # DrawingML picture without textbox/content -> not a shape, let picture parser handle it
-    # Important: DrawingML may represent both pictures and real shapes.
-    # We only deflect pure picture payloads (pic:pic). Text boxes / actual shapes
-    # will continue through normal shape parsing.
-    if _has_drawingml_picture(node) and not _has_vml_textbox(node):
+    classification = classify_media_node(node)
+    if classification.kind != "shape":
         return None
 
     shape_type = _parse_shape_type(node)
