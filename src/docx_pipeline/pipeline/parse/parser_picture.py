@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, Tuple
 import os
 import re
 from lxml import etree
+from docx_pipeline.pipeline.parse.parser_media_classifier import classify_media_node
 
 W_NS  = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 A_NS  = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -137,6 +138,10 @@ def parse_picture_node(
       extent {cx, cy} (EMU), если удалось извлечь из OOXML.
     """
     if node is None:
+        return None
+
+    classification = classify_media_node(node)
+    if classification.kind != "picture":
         return None
 
     rid: Optional[str] = None
